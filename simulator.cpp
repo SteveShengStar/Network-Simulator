@@ -81,7 +81,7 @@ void genDepartEvents(vector<double>& arrivalValues, const int serviceRate, vecto
 
 	std::queue<double> departQueue;
 	int arrIndex = 0;
-	int departIndex = 0;
+	int eventIndex = 0;
 	double elapsedTime = 0;
 
 	while (elapsedTime < totalSimTime) {
@@ -108,13 +108,13 @@ void genDepartEvents(vector<double>& arrivalValues, const int serviceRate, vecto
 			arrivalValues.at(arrIndex) -= timePassed;
 			
 			EventOb event;
-			event.id = departIndex;
+			event.id = eventIndex;
 			event.instTime = elapsedTime;
 			event.eventType = EventType::Departure;
 			event.packetDropped = false;
 			departEvents.push_back(event);
 
-			departIndex++;
+			eventIndex++;
 		} 
 	}
 }
@@ -124,7 +124,6 @@ void genDepartEvents(vector<double>& arrivalValues, vector<EventOb>& arrivalEven
 
 	std::queue<double> departQueue;
 	int arrIndex = 0;
-	int departIndex = 0;
 	int eventIndex = 0;
 	double elapsedTime = 0;
 
@@ -146,7 +145,6 @@ void genDepartEvents(vector<double>& arrivalValues, vector<EventOb>& arrivalEven
 				arrivalEvents.at(arrIndex).packetDropped = true;
 			} else {
 				departQueue.push(genRandomValue(serviceRate, totalSimTime));
-				departIndex++;
 			}
 			arrIndex++;
 		}
@@ -177,7 +175,7 @@ bool compare(const EventOb& e1, const EventOb& e2) {
 }
 
 template<std::size_t SIZE>
-void runDESimulator(array<EventOb, SIZE> allEvents) {
+vector<Statistics> runDESimulator(array<EventOb, SIZE> allEvents) {
 	
 	int arrivals = 0;
 	int departures = 0;
@@ -207,26 +205,20 @@ void runDESimulator(array<EventOb, SIZE> allEvents) {
 				arrivals++;
 				break;
 			case EventType::Departure:
-				if (event.id == eventQueue.front().id) {
-					eventQueue.pop();
-					departures++;
+				eventQueue.pop();
+				departures++;
 
-					if (eventQueue.empty()) {
-						queueState.activeTime += event.instTime - lastTimeCheckpoint;
-						queueState.stateLabel = QueueStateLabel::IDLE;
-						lastTimeCheckpoint = event.instTime;
-					}
-
-				} else {
-					throw Exception("Error: in DES, Mismatch between allEvents and eventQueue event id"); // TODO
-					exit(1);
+				if (eventQueue.empty()) {
+					queueState.activeTime += event.instTime - lastTimeCheckpoint;
+					queueState.stateLabel = QueueStateLabel::IDLE;
+					lastTimeCheckpoint = event.instTime;
 				}
+
 				break;
 			default:
 				observations++;
 				sumOfPacketsInQueueAllFrames += eventQueue.size();
 
-			
 				if (queueState.stateLabel == QueueStateLabel::IDLE) {
 					queueState.idleTime += event.instTime - lastTimeCheckpoint;
 				} else {
@@ -241,11 +233,12 @@ void runDESimulator(array<EventOb, SIZE> allEvents) {
 				stats.push_back(stat);
 		}
 	}
+	return stats;
 }
 
-// Not sure about this anymore !
+// Not tested
 template<std::size_t SIZE>
-void runDESimulatorFiniteBuffer(array<EventOb, SIZE> allEvents, int capacity) {
+vector<Statistics> runDESimulatorFiniteBuffer(array<EventOb, SIZE> allEvents, int capacity) {
 
 	int arrivals = 0;
 	int departures = 0;
@@ -272,7 +265,7 @@ void runDESimulatorFiniteBuffer(array<EventOb, SIZE> allEvents, int capacity) {
 				queueState.stateLabel = QueueStateLabel::ACTIVE;
 				lastTimeCheckpoint = event.instTime;
 			} 
-			if (eventQueue.size() + 1 > capacity) {
+			if (event.packetDropped == true) {
 				droppedPackets++;
 			} else {
 				eventQueue.add(event);
@@ -280,20 +273,13 @@ void runDESimulatorFiniteBuffer(array<EventOb, SIZE> allEvents, int capacity) {
 			arrivals++;
 			break;
 		case EventType::Departure:
-			if (event.id == eventQueue.front().id) {
-				eventQueue.pop();
-				departures++;
+			eventQueue.pop();
+			departures++;
 
-				if (eventQueue.empty()) {
-					queueState.activeTime += event.instTime - lastTimeCheckpoint;
-					queueState.stateLabel = QueueStateLabel::IDLE;
-					lastTimeCheckpoint = event.instTime;
-				}
-
-			}
-			else {
-				throw Exception("Error: in DES, Mismatch between allEvents and eventQueue event id"); // TODO
-				exit(1);
+			if (eventQueue.empty()) {
+				queueState.activeTime += event.instTime - lastTimeCheckpoint;
+				queueState.stateLabel = QueueStateLabel::IDLE;
+				lastTimeCheckpoint = event.instTime;
 			}
 			break;
 		default:
@@ -316,6 +302,7 @@ void runDESimulatorFiniteBuffer(array<EventOb, SIZE> allEvents, int capacity) {
 			stats.push_back(stat);
 		}
 	}
+	return stats;
 }
 
 int main() {
@@ -350,7 +337,7 @@ int main() {
 	genDepartEvents(arrivalValues, SERVICE_RATE, departEvents, TOTAL_SIMTIME);
 
 	/* For the Finite Queue */
-	genDepartEvents(arrivalValues, arrivalEvents, SERVICE_RATE, departEvents, TOTAL_SIMTIME, QUEUE_CAPACITY);
+	//genDepartEvents(arrivalValues, arrivalEvents, SERVICE_RATE, departEvents, TOTAL_SIMTIME, QUEUE_CAPACITY);
 
 	genObserverEvents(observeEvents, ARRIVAL_RATE*6, TOTAL_SIMTIME);
 
