@@ -6,6 +6,7 @@
 #include <array>
 #include <iterator>
 #include <queue>
+#include <vector>
 
 using namespace std;
 
@@ -16,13 +17,17 @@ struct EventOb {
 	double instTime;
 };
 struct Statistics {
-	int arrivals;
-	int departures;
-	int observations;
+	double avgPacketsInQueue;
 	double idleTime;
 	double lossRatio;
 };
 
+enum QueueStateLabel {ACTIVE, IDLE};
+struct QueueState {
+	double idleTime;
+	double activeTime;
+	QueueStateLabel stateLabel;
+};
 // Accumulated Values
 template<std::size_t DBL_ARRAY_SIZE, std::size_t EVENT_ARRAY_SIZE>
 void genArrivalEvents(std::array<double, DBL_ARRAY_SIZE>& randValuesArray, std::array<EventOb, EVENT_ARRAY_SIZE>& randVarArray, EventType eType, int lambda) {
@@ -129,38 +134,67 @@ bool compare(const EventOb& e1, const EventOb& e2) {
 
 template<std::size_t SIZE>
 void runDESimulator(array<EventOb, SIZE> allEvents) {
-	Statistics stats;
+	
 	int arrivals = 0;
 	int departures = 0;
 	int observations = 0;
-	queue<EventOb> eventQueue;
 
-	/*stats.arrivals = 0;
-	stats.departures = 0;
-	stats.observations = 0;*/
+	queue<EventOb> eventQueue;
+	vector<Statistics> stats;
+
+	QueueState queueState;
+	queueState.idleTime = 0;
+	queueState.activeTime = 0;
+	queueState.stateLabel = QueueStateLabel::IDLE;
+	double lastTimeCheckpoint = 0;
+
 
 	int sumOfPacketsInQueueAllFrames = 0;
 
 	for (EventOb& event : allEvents) {
 		switch (event.eventType) {
 			case EventType::Arrival:
+				if (eventQueue.empty()) {
+					queueState.idleTime += event.instTime - lastTimeCheckpoint;
+					queueState.stateLabel = QueueStateLabel::ACTIVE;
+					lastTimeCheckpoint = event.instTime;
+				}
 				eventQueue.add(event);
 				arrivals++;
 				break;
 			case EventType::Departure:
 				if (event.id == eventQueue.front().id) {
 					eventQueue.pop();
+					departures++;
+
+					if (eventQueue.empty()) {
+						queueState.activeTime += event.instTime - lastTimeCheckpoint;
+						queueState.stateLabel = QueueStateLabel::IDLE;
+						lastTimeCheckpoint = event.instTime;
+					}
+
 				} else {
 					throw Exception("Error: in DES, Mismatch between allEvents and eventQueue event id"); // TODO
 					exit(1);
 				}
-				
-				departures++;
 				break;
 			default:
+				observations++;
 				sumOfPacketsInQueueAllFrames += eventQueue.size();
 
-				observations++;
+			
+				if (queueState.stateLabel == QueueStateLabel::IDLE) {
+					queueState.idleTime += event.instTime - lastTimeCheckpoint;
+				} else {
+					queueState.activeTime += event.instTime - lastTimeCheckpoint;
+				}
+				lastTimeCheckpoint = event.instTime; 
+
+				Statistics stat;
+				stat.avgPacketsInQueue = (float)sumOfPacketsInQueueAllFrames / (float)observations;
+				stat.idleTime = queueState.idleTime / event.instTime;
+				stat.lossRatio = -1.0; // TODO: no-value ?
+				stats.push_back(stat);
 		}
 	}
 }
