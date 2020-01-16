@@ -433,11 +433,25 @@ int main() {
 	vector<Statistics> stats = runDESimulator(allEvents);
 
 	
+	// Print statistics
 	ofstream myfile;
+	double idleRatio = 0.0;
+	double averagePacketsInQueue = 0.0;
+	vector<Statistics>::iterator itStats = stats.end();
+	itStats--;
+	itStats--;
+	const int SAMPLES_COLLECTED = 7;
+	for (int i = 0; i < SAMPLES_COLLECTED; i++, itStats--) {
+		cout << "idle time: " << itStats->idleTime << endl;
+		idleRatio += itStats->idleTime;
+		cout << "AVG_PACKETS: " << itStats->avgPacketsInQueue << endl;
+		averagePacketsInQueue += itStats->avgPacketsInQueue;
+	}
+
 	myfile.open("data/output.csv");
 	myfile << "Row-Value, " << ((float)ARRIVAL_RATE / (float)SERVICE_RATE) << endl;
-	myfile << "Av. No. of Packets in Buffer, " << prev(stats.end())->avgPacketsInQueue << endl;
-	myfile << "Idle Time Percent, " << prev(stats.end())->idleTime << endl;
+	myfile << "Av. No. of Packets in Buffer, " << averagePacketsInQueue / (float)SAMPLES_COLLECTED << endl;
+	myfile << "Idle Time Percent, " << idleRatio / (float)SAMPLES_COLLECTED << endl;
 	myfile.close();
 
 	//printTest1Results();
