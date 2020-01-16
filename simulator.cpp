@@ -270,6 +270,11 @@ vector<Statistics> runDESimulatorFiniteBuffer(array<EventOb, SIZE> allEvents, in
 			} else {
 				eventQueue.add(event);
 			}
+			// TODO: remove
+			if (eventQueue.size() > capacity) {
+				cerr << "Error: Number packets exceeds buffer cap." << endl;
+				exit(1);
+			}
 			arrivals++;
 			break;
 		case EventType::Departure:
@@ -321,12 +326,12 @@ int main() {
 	/* Test Case 1: Arrival Significantly Faster than Departure */
 	//int arrivalRate = 25;
 	//int serviceRate = 5;
-	// Result: good
-
+	// Result: was good
+	
 	/* Test Case 2: Departure Significantly Slower than Arrival */
 	/*int arrivalRate = 5;
 	int serviceRate = 50;*/
-	// Result: good
+	// Result: was good
 
 	double queueUtilization = (float)ARRIVAL_RATE / (float)SERVICE_RATE;
 
