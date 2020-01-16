@@ -308,6 +308,23 @@ vector<Statistics> runDESimulatorFiniteBuffer(vector<EventOb> allEvents, int cap
 	return stats;
 }
 
+/*void printTest1Results(vector<EventOb> someArray) {
+	double sum = 0;
+	double average;
+	double numerator = 0;
+
+	for (EventOb )
+
+	average = sum / 1000;
+	cout << "Average: " << average << endl;
+
+	for (int i = 0; i < 1000; i++) {
+		numerator += pow(someArray[i] - average, 2);
+	}
+	double variance = numerator / 999;
+	cout << "Variance: " << variance << endl;
+}*/
+
 int main() {
 	std::vector<double> arrivalValues;
 	std::vector<EventOb> arrivalEvents;
@@ -316,8 +333,8 @@ int main() {
 	std::vector<EventOb> observeEvents;
 
 	/* Normal Parameters */
-	const int SERVICE_RATE = 25;
-	const int ARRIVAL_RATE = 75;
+	const int SERVICE_RATE = 2000;
+	const int ARRIVAL_RATE = 500;    
 	const int TOTAL_SIMTIME = 1000;
 	const int QUEUE_CAPACITY = 10;
 
@@ -370,6 +387,8 @@ int main() {
 			exit(1);
 		}
 	}
+	
+	printTest1Results();
 	return 0;
 }
 
