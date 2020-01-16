@@ -113,6 +113,63 @@ void genDepartEvents(std::array<double, SIZE1>& arrivalValues, std::array<double
 	}
 }
 
+
+template<std::size_t SIZE1, std::size_t SIZE2, std::size_t SIZE3>
+void genDepartEvents(std::array<double, SIZE1>& arrivalValues, std::array<double, SIZE2>& departValues, std::array<EventOb, SIZE3>& departEvents, int capacity) {
+
+	std::queue<double> departQueue;
+	int arrIndex = 0;
+	int departIndex = 0;
+	double elapsedTime = 0;
+
+	departQueue.push(departValues[arrIndex]);
+	elapsedTime += arrivalValues[arrIndex];
+	arrIndex++;
+
+	while (arrIndex < arrivalValues.size()) {
+
+		if (departQueue.empty() || (departQueue.front() > arrivalValues[arrIndex])) {
+			double timePassed = arrivalValues[arrIndex];
+
+			if (!departQueue.empty()) {
+				departQueue.front() = departQueue.front() - timePassed;
+			}
+
+			elapsedTime += timePassed;
+			departQueue.push(departValues[arrIndex]);
+			arrIndex++;
+		}
+		else if (departQueue.front() < arrivalValues[arrIndex]) {
+			double timePassed = departQueue.front();
+			elapsedTime += timePassed;
+			departQueue.pop();
+			arrivalValues[arrIndex] -= timePassed;
+
+			departEvents[departIndex].id = departIndex;
+			departEvents[departIndex].instTime = elapsedTime;
+			departEvents[departIndex].eventType = EventType::Departure;
+			departIndex++;
+		}
+	}
+
+	while (!departQueue.empty()) {
+		if (departIndex >= SIZE1) {
+			cerr << "Error: Depart Index Exceeded 1000" << endl;
+		}
+		double timePassed = departQueue.front();
+		elapsedTime += timePassed;
+
+		departQueue.pop();
+		departEvents[departIndex].id = departIndex;
+		departEvents[departIndex].instTime = elapsedTime;
+		departEvents[departIndex].eventType = EventType::Departure;
+		departIndex++;
+	}
+}
+
+
+
+
 template<std::size_t SIZE>
 void genObserverEvents(std::array<EventOb, SIZE>& observeEvents, int sampleRate) {
 	double sum = 0.0;
@@ -199,6 +256,81 @@ void runDESimulator(array<EventOb, SIZE> allEvents) {
 	}
 }
 
+// Not sure about this anymore !
+template<std::size_t SIZE>
+void runDESimulatorFiniteBuffer(array<EventOb, SIZE> allEvents, int capacity) {
+
+	int arrivals = 0;
+	int departures = 0;
+	int observations = 0;
+
+	queue<EventOb> eventQueue;
+	vector<Statistics> stats;
+
+	QueueState queueState;
+	queueState.idleTime = 0;
+	queueState.activeTime = 0;
+	queueState.stateLabel = QueueStateLabel::IDLE;
+	double lastTimeCheckpoint = 0;
+	int droppedPackets = 0;
+
+
+	int sumOfPacketsInQueueAllFrames = 0;
+
+	for (EventOb& event : allEvents) {
+		switch (event.eventType) {
+		case EventType::Arrival:
+			if (eventQueue.empty()) {
+				queueState.idleTime += event.instTime - lastTimeCheckpoint;
+				queueState.stateLabel = QueueStateLabel::ACTIVE;
+				lastTimeCheckpoint = event.instTime;
+			} 
+			if (eventQueue.size() + 1 > capacity) {
+				droppedPackets++;
+			} else {
+				eventQueue.add(event);
+			}
+			arrivals++;
+			break;
+		case EventType::Departure:
+			if (event.id == eventQueue.front().id) {
+				eventQueue.pop();
+				departures++;
+
+				if (eventQueue.empty()) {
+					queueState.activeTime += event.instTime - lastTimeCheckpoint;
+					queueState.stateLabel = QueueStateLabel::IDLE;
+					lastTimeCheckpoint = event.instTime;
+				}
+
+			}
+			else {
+				throw Exception("Error: in DES, Mismatch between allEvents and eventQueue event id"); // TODO
+				exit(1);
+			}
+			break;
+		default:
+			observations++;
+			sumOfPacketsInQueueAllFrames += eventQueue.size();
+
+
+			if (queueState.stateLabel == QueueStateLabel::IDLE) {
+				queueState.idleTime += event.instTime - lastTimeCheckpoint;
+			}
+			else {
+				queueState.activeTime += event.instTime - lastTimeCheckpoint;
+			}
+			lastTimeCheckpoint = event.instTime;
+
+			Statistics stat;
+			stat.avgPacketsInQueue = (float)sumOfPacketsInQueueAllFrames / (float)observations;
+			stat.idleTime = queueState.idleTime / event.instTime;
+			stat.lossRatio = (float) droppedPackets / (float) arrivals;
+			stats.push_back(stat);
+		}
+	}
+}
+
 int main() {
 	const int SAMPLE_SIZE = 1000;
 	std::array<double, SAMPLE_SIZE> arrivalValues;
@@ -210,6 +342,7 @@ int main() {
 	/* Normal Parameters */
 	int serviceRate = 25;
 	int arrivalRate = 75;
+	int queueCapacity;
 
 	/* Test Case 1: Arrival Significantly Faster than Departure */
 	//int arrivalRate = 25;
@@ -229,6 +362,10 @@ int main() {
 
 	/* Function To Test */
 	genDepartEvents(arrivalValues, departValues, departEvents);
+
+	/* For the Finite Queue */
+	genDepartEvents(arrivalValues, departValues, departEvents, queueCapacity);
+
 	genObserverEvents(observeEvents, arrivalRate*6);
 
 	const int totalSize = departEvents.size() + arrivalEvents.size() + observeEvents.size();
