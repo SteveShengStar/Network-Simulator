@@ -7,6 +7,7 @@
 #include <iterator>
 #include <queue>
 #include <vector>
+#include <fstream>
 
 using namespace std;
 
@@ -37,15 +38,18 @@ void genArrivalEvents(vector<double>& randValuesArray, vector<EventOb>& randVarA
 	int eventId = 0;
 
 	while (elapsedTime < totalSimTime) {
-		randVarArray[eventId].id = eventId;
-		randVarArray[eventId].eventType = eType;
+		EventOb event;
+		event.id = eventId;
+		event.eventType = eType;
 
 		double temp = (float)rand() / (float)RAND_MAX;
 		randVar = -log(1.00 - temp) / lambda;
 
 		elapsedTime += randVar;
-		randVarArray[eventId].instTime = elapsedTime;
-		randValuesArray[eventId] = randVar;
+		event.instTime = elapsedTime;
+		randVarArray.push_back(event);
+
+		randValuesArray.push_back(randVar);
 		eventId++;
 	}
 }
@@ -115,7 +119,25 @@ void genDepartEvents(vector<double>& arrivalValues, const int serviceRate, vecto
 			departEvents.push_back(event);
 
 			eventIndex++;
-		} 
+		}
+		else {
+			double timePassed = departQueue.front();
+			elapsedTime += timePassed;
+
+			if (elapsedTime >= totalSimTime) break;
+			departQueue.pop();
+
+			EventOb event;
+			event.id = eventIndex;
+			event.instTime = elapsedTime;
+			event.eventType = EventType::Departure;
+			event.packetDropped = false;
+			departEvents.push_back(event);
+			eventIndex++;
+
+			departQueue.push(genRandomValue(serviceRate, totalSimTime));
+			arrIndex++;
+		}
 	}
 }
 
@@ -165,6 +187,24 @@ void genDepartEvents(vector<double>& arrivalValues, vector<EventOb>& arrivalEven
 			departEvents.push_back(event);
 
 			eventIndex++;
+		}
+		else {
+			double timePassed = departQueue.front();
+			elapsedTime += timePassed;
+
+			if (elapsedTime >= totalSimTime) break;
+			departQueue.pop();
+
+			EventOb event;
+			event.id = eventIndex;
+			event.instTime = elapsedTime;
+			event.eventType = EventType::Departure;
+			event.packetDropped = false;
+			departEvents.push_back(event);
+			eventIndex++;
+
+			departQueue.push(genRandomValue(serviceRate, totalSimTime));
+			arrIndex++;
 		}
 	}
 }
@@ -333,9 +373,9 @@ int main() {
 	std::vector<EventOb> observeEvents;
 
 	/* Normal Parameters */
-	const int SERVICE_RATE = 2000;
-	const int ARRIVAL_RATE = 500;    
-	const int TOTAL_SIMTIME = 1000;
+	const int SERVICE_RATE = 1000000;
+	const int ARRIVAL_RATE = 250000;
+	const int TOTAL_SIMTIME = 10; // 1000
 	const int QUEUE_CAPACITY = 10;
 
 	/* Test Case 1: Arrival Significantly Faster than Departure */
@@ -359,7 +399,7 @@ int main() {
 	/* For the Finite Queue */
 	//genDepartEvents(arrivalValues, arrivalEvents, SERVICE_RATE, departEvents, TOTAL_SIMTIME, QUEUE_CAPACITY);
 
-	genObserverEvents(observeEvents, ARRIVAL_RATE*6, TOTAL_SIMTIME);
+	/*genObserverEvents(observeEvents, ARRIVAL_RATE*6, TOTAL_SIMTIME);
 
 
 	vector<EventOb> allEvents;
@@ -377,7 +417,7 @@ int main() {
 
 	sort(allEvents.begin(), allEvents.end(), compare);
 
-	runDESimulator(allEvents);
+	vector<Statistics> stats = runDESimulator(allEvents);
 
 	// Test that all events are in order
 	// Result: No Errors Here so far.
@@ -387,9 +427,16 @@ int main() {
 			exit(1);
 		}
 	}
-	
-	printTest1Results();
-	return 0;
+
+	ofstream myfile;
+	myfile.open("data/output.csv");
+	myfile << "Row-Value, " << ((float)ARRIVAL_RATE / (float)SERVICE_RATE) << endl;
+	myfile << "Av. No. of Packets in Buffer, " << (stats.end())->avgPacketsInQueue << endl;
+	myfile << "Idle Time Percent, " << (stats.end())->idleTime << endl;
+	myfile.close();
+
+	//printTest1Results();
+	return 0;*/
 }
 
 
