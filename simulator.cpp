@@ -15,6 +15,7 @@ struct EventOb {
 	int id;
 	EventType eventType;
 	double instTime;
+	bool packetDropped;
 };
 struct Statistics {
 	double avgPacketsInQueue;
@@ -76,6 +77,7 @@ void genObserverEvents(vector<EventOb>& observeEvents, int sampleRate, const dou
 		event.id = eventId;
 		event.eventType = EventType::Observer;
 		event.instTime = elapsedTime;
+		event.packetDropped = false;
 		observeEvents.push_back(event);
 
 		eventId++;
@@ -116,6 +118,7 @@ void genDepartEvents(vector<double>& arrivalValues, vector<double>& departValues
 			event.id = departIndex;
 			event.instTime = elapsedTime;
 			event.eventType = EventType::Departure;
+			event.packetDropped = false;
 			departEvents.push_back(event);
 
 			departIndex++;
@@ -123,60 +126,58 @@ void genDepartEvents(vector<double>& arrivalValues, vector<double>& departValues
 	}
 }
 
-/*
-template<std::size_t SIZE1, std::size_t SIZE2, std::size_t SIZE3>
-void genDepartEvents(std::array<double, SIZE1>& arrivalValues, std::array<double, SIZE2>& departValues, std::array<EventOb, SIZE3>& departEvents, int capacity) {
+
+void genDepartEvents(vector<double>& arrivalValues, vector<EventOb>& arrivalEvents, vector<double>& departValues, vector<EventOb>& departEvents, const double totalSimTime, const int capacity) {
 
 	std::queue<double> departQueue;
 	int arrIndex = 0;
 	int departIndex = 0;
+	int eventIndex = 0;
 	double elapsedTime = 0;
 
-	departQueue.push(departValues[arrIndex]);
-	elapsedTime += arrivalValues[arrIndex];
-	arrIndex++;
+	while (elapsedTime < totalSimTime) {
 
-	while (arrIndex < arrivalValues.size()) {
-
-		if (departQueue.empty() || (departQueue.front() > arrivalValues[arrIndex])) {
-			double timePassed = arrivalValues[arrIndex];
+		if (departQueue.empty() || (departQueue.front() > arrivalValues.front()) ) {
+			double timePassed = arrivalValues.front();
+			arrivalValues.erase(arrivalValues.begin());
 
 			if (!departQueue.empty()) {
 				departQueue.front() = departQueue.front() - timePassed;
 			}
 
 			elapsedTime += timePassed;
-			departQueue.push(departValues[arrIndex]);
+
+			if (elapsedTime >= totalSimTime) break;
+			if (departQueue.size() + 1 > capacity) {
+				// Drop the packet
+				arrivalEvents.at(arrIndex).packetDropped = true;
+			} else {
+				departQueue.push(departValues.at(departIndex));
+				departIndex++;
+			}
 			arrIndex++;
 		}
-		else if (departQueue.front() < arrivalValues[arrIndex]) {
+		else if (departQueue.front() < arrivalValues.front()) {
 			double timePassed = departQueue.front();
 			elapsedTime += timePassed;
+
+			if (elapsedTime >= totalSimTime) break;
 			departQueue.pop();
-			arrivalValues[arrIndex] -= timePassed;
+			arrivalValues.front() -= timePassed;
 
-			departEvents[departIndex].id = departIndex;
-			departEvents[departIndex].instTime = elapsedTime;
-			departEvents[departIndex].eventType = EventType::Departure;
-			departIndex++;
+			EventOb event;
+			event.id = eventIndex;
+			event.instTime = elapsedTime;
+			event.eventType = EventType::Departure;
+			event.packetDropped = false;
+
+			departEvents.push_back(event);
+
+			eventIndex++;
 		}
-	}
-
-	while (!departQueue.empty()) {
-		if (departIndex >= SIZE1) {
-			cerr << "Error: Depart Index Exceeded 1000" << endl;
-		}
-		double timePassed = departQueue.front();
-		elapsedTime += timePassed;
-
-		departQueue.pop();
-		departEvents[departIndex].id = departIndex;
-		departEvents[departIndex].instTime = elapsedTime;
-		departEvents[departIndex].eventType = EventType::Departure;
-		departIndex++;
 	}
 }
-*/
+
 
 bool compare(const EventOb& e1, const EventOb& e2) {
 	return e1.instTime < e2.instTime;
@@ -325,7 +326,6 @@ void runDESimulatorFiniteBuffer(array<EventOb, SIZE> allEvents, int capacity) {
 }
 
 int main() {
-	const int SAMPLE_SIZE = 1000;
 	std::vector<double> arrivalValues;
 	std::vector<EventOb> arrivalEvents;
 	std::vector<double> departValues;
@@ -333,9 +333,10 @@ int main() {
 	std::vector<EventOb> observeEvents;
 
 	/* Normal Parameters */
-	int serviceRate = 25;
-	int arrivalRate = 75;
-	int queueCapacity;
+	const int SERVICE_RATE = 25;
+	const int ARRIVAL_RATE = 75;
+	const int TOTAL_SIMTIME = 1000;
+	const int QUEUE_CAPACITY = 10;
 
 	/* Test Case 1: Arrival Significantly Faster than Departure */
 	//int arrivalRate = 25;
@@ -347,22 +348,23 @@ int main() {
 	int serviceRate = 50;*/
 	// Result: good
 
-	double queueUtilization = arrivalRate / serviceRate;
+	double queueUtilization = (float)ARRIVAL_RATE / (float)SERVICE_RATE;
 
 	genArrivalEvents(arrivalValues, arrivalEvents, 
-			EventType::Arrival, arrivalRate);
-	genRandomValues(departValues, serviceRate);
+			EventType::Arrival, ARRIVAL_RATE, TOTAL_SIMTIME);
+	genRandomValues(departValues, SERVICE_RATE, TOTAL_SIMTIME);
 
 	/* Function To Test */
-	genDepartEvents(arrivalValues, departValues, departEvents);
+	genDepartEvents(arrivalValues, departValues, departEvents, TOTAL_SIMTIME);
 
 	/* For the Finite Queue */
-	genDepartEvents(arrivalValues, departValues, departEvents, queueCapacity);
+	genDepartEvents(arrivalValues, arrivalEvents, departValues, departEvents, TOTAL_SIMTIME, QUEUE_CAPACITY);
 
-	genObserverEvents(observeEvents, arrivalRate*6);
+	genObserverEvents(observeEvents, ARRIVAL_RATE*6, TOTAL_SIMTIME);
 
-	const int totalSize = departEvents.size() + arrivalEvents.size() + observeEvents.size();
-	array<EventOb, totalSize> allEvents;
+	//const int TOTAL_EVENTS = departEvents.size() + arrivalEvents.size() + observeEvents.size();
+	// TODO: arbitrarily set
+	array<EventOb, 10000> allEvents;
 	for (int i = 0; i < arrivalEvents.size(); i++) {
 		allEvents[i] = arrivalEvents[i];
 	}
