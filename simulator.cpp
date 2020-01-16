@@ -174,8 +174,7 @@ bool compare(const EventOb& e1, const EventOb& e2) {
 	return e1.instTime < e2.instTime;
 }
 
-template<std::size_t SIZE>
-vector<Statistics> runDESimulator(array<EventOb, SIZE> allEvents) {
+vector<Statistics> runDESimulator(vector<EventOb> allEvents) {
 	
 	int arrivals = 0;
 	int departures = 0;
@@ -201,7 +200,7 @@ vector<Statistics> runDESimulator(array<EventOb, SIZE> allEvents) {
 					queueState.stateLabel = QueueStateLabel::ACTIVE;
 					lastTimeCheckpoint = event.instTime;
 				}
-				eventQueue.add(event);
+				eventQueue.push(event);
 				arrivals++;
 				break;
 			case EventType::Departure:
@@ -237,8 +236,7 @@ vector<Statistics> runDESimulator(array<EventOb, SIZE> allEvents) {
 }
 
 // Not tested
-template<std::size_t SIZE>
-vector<Statistics> runDESimulatorFiniteBuffer(array<EventOb, SIZE> allEvents, int capacity) {
+vector<Statistics> runDESimulatorFiniteBuffer(vector<EventOb> allEvents, int capacity) {
 
 	int arrivals = 0;
 	int departures = 0;
@@ -268,7 +266,7 @@ vector<Statistics> runDESimulatorFiniteBuffer(array<EventOb, SIZE> allEvents, in
 			if (event.packetDropped == true) {
 				droppedPackets++;
 			} else {
-				eventQueue.add(event);
+				eventQueue.push(event);
 			}
 			// TODO: remove
 			if (eventQueue.size() > capacity) {
@@ -338,7 +336,7 @@ int main() {
 	genArrivalEvents(arrivalValues, arrivalEvents, 
 			EventType::Arrival, ARRIVAL_RATE, TOTAL_SIMTIME);
 
-	/* Function To Test */
+	/* For Infinite Queue */
 	genDepartEvents(arrivalValues, SERVICE_RATE, departEvents, TOTAL_SIMTIME);
 
 	/* For the Finite Queue */
@@ -346,19 +344,18 @@ int main() {
 
 	genObserverEvents(observeEvents, ARRIVAL_RATE*6, TOTAL_SIMTIME);
 
-	//const int TOTAL_EVENTS = departEvents.size() + arrivalEvents.size() + observeEvents.size();
-	// TODO: arbitrarily set
-	array<EventOb, 10000> allEvents;
+
+	vector<EventOb> allEvents;
 	for (int i = 0; i < arrivalEvents.size(); i++) {
-		allEvents[i] = arrivalEvents[i];
+		allEvents.push_back(arrivalEvents[i]);
 	}
 	int baseIndex = arrivalEvents.size();
 	for (int i = 0; i < departEvents.size(); i++) {
-		allEvents[i + baseIndex] = departEvents[i];
+		allEvents.push_back(departEvents[i]);
 	}
 	baseIndex += departEvents.size();
 	for (int i = 0; i < observeEvents.size(); i++) {
-		allEvents[i + baseIndex] = observeEvents[i];
+		allEvents.push_back(observeEvents[i]);
 	}
 
 	sort(allEvents.begin(), allEvents.end(), compare);
