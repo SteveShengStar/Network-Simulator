@@ -51,16 +51,9 @@ void genArrivalEvents(vector<double>& randValuesArray, vector<EventOb>& randVarA
 }
 
 // Individual, non-accumulated values
-void genRandomValues(vector<double>& randomValArray, int lambda, const double totalSimTime){
-	double elapsedTime = 0.0;
-
-	while (elapsedTime < totalSimTime) {
-		double temp = (float)rand() / (float)RAND_MAX;
-		double randVar = -log(1.00 - temp) / lambda;
-	
-		randomValArray.push_back(randVar);
-		elapsedTime += randVar;
-	}
+double genRandomValue(int lambda, const double totalSimTime){
+	double temp = (float)rand() / (float)RAND_MAX;
+	return (-log(1.00 - temp) / (float)lambda);
 }
 
 
@@ -84,7 +77,7 @@ void genObserverEvents(vector<EventOb>& observeEvents, int sampleRate, const dou
 	}
 }
 
-void genDepartEvents(vector<double>& arrivalValues, vector<double>& departValues, vector<EventOb>& departEvents, const double totalSimTime) {
+void genDepartEvents(vector<double>& arrivalValues, const int serviceRate, vector<EventOb>& departEvents, const double totalSimTime) {
 
 	std::queue<double> departQueue;
 	int arrIndex = 0;
@@ -103,7 +96,7 @@ void genDepartEvents(vector<double>& arrivalValues, vector<double>& departValues
 			elapsedTime += timePassed;
 
 			if (elapsedTime >= totalSimTime) break;
-			departQueue.push(departValues.at(arrIndex));
+			departQueue.push(genRandomValue(serviceRate, totalSimTime));
 			arrIndex++;
 		}
 		else if (departQueue.front() < arrivalValues.at(arrIndex)) {
@@ -127,7 +120,7 @@ void genDepartEvents(vector<double>& arrivalValues, vector<double>& departValues
 }
 
 
-void genDepartEvents(vector<double>& arrivalValues, vector<EventOb>& arrivalEvents, vector<double>& departValues, vector<EventOb>& departEvents, const double totalSimTime, const int capacity) {
+void genDepartEvents(vector<double>& arrivalValues, vector<EventOb>& arrivalEvents, const int serviceRate, vector<EventOb>& departEvents, const double totalSimTime, const int capacity) {
 
 	std::queue<double> departQueue;
 	int arrIndex = 0;
@@ -152,7 +145,7 @@ void genDepartEvents(vector<double>& arrivalValues, vector<EventOb>& arrivalEven
 				// Drop the packet
 				arrivalEvents.at(arrIndex).packetDropped = true;
 			} else {
-				departQueue.push(departValues.at(departIndex));
+				departQueue.push(genRandomValue(serviceRate, totalSimTime));
 				departIndex++;
 			}
 			arrIndex++;
@@ -352,13 +345,12 @@ int main() {
 
 	genArrivalEvents(arrivalValues, arrivalEvents, 
 			EventType::Arrival, ARRIVAL_RATE, TOTAL_SIMTIME);
-	genRandomValues(departValues, SERVICE_RATE, TOTAL_SIMTIME);
 
 	/* Function To Test */
-	genDepartEvents(arrivalValues, departValues, departEvents, TOTAL_SIMTIME);
+	genDepartEvents(arrivalValues, SERVICE_RATE, departEvents, TOTAL_SIMTIME);
 
 	/* For the Finite Queue */
-	genDepartEvents(arrivalValues, arrivalEvents, departValues, departEvents, TOTAL_SIMTIME, QUEUE_CAPACITY);
+	genDepartEvents(arrivalValues, arrivalEvents, SERVICE_RATE, departEvents, TOTAL_SIMTIME, QUEUE_CAPACITY);
 
 	genObserverEvents(observeEvents, ARRIVAL_RATE*6, TOTAL_SIMTIME);
 
