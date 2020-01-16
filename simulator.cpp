@@ -29,91 +29,101 @@ struct QueueState {
 	QueueStateLabel stateLabel;
 };
 // Accumulated Values
-template<std::size_t DBL_ARRAY_SIZE, std::size_t EVENT_ARRAY_SIZE>
-void genArrivalEvents(std::array<double, DBL_ARRAY_SIZE>& randValuesArray, std::array<EventOb, EVENT_ARRAY_SIZE>& randVarArray, EventType eType, int lambda) {
+void genArrivalEvents(vector<double>& randValuesArray, vector<EventOb>& randVarArray, EventType eType, int lambda, const double totalSimTime) {
 
 	double randVar;
-	double sum = 0;
+	double elapsedTime = 0.0;
+	int eventId = 0;
 
-	for (int i = 0; i < randVarArray.size(); i++) { 
-		randVarArray[i].id = i;
-		randVarArray[i].eventType = eType;
-	
+	while (elapsedTime < totalSimTime) {
+		randVarArray[eventId].id = eventId;
+		randVarArray[eventId].eventType = eType;
+
 		double temp = (float)rand() / (float)RAND_MAX;
 		randVar = -log(1.00 - temp) / lambda;
-		
-		sum += randVar;
-		randVarArray[i].instTime = sum;
-		randValuesArray[i] = randVar;
+
+		elapsedTime += randVar;
+		randVarArray[eventId].instTime = elapsedTime;
+		randValuesArray[eventId] = randVar;
+		eventId++;
 	}
 }
 
 // Individual, non-accumulated values
-template<std::size_t SIZE>
-void genRandomValues(std::array<double, SIZE>& randomValArray, int lambda){
-	for (int i = 0; i < randomValArray.size(); i++){
+void genRandomValues(vector<double>& randomValArray, int lambda, const double totalSimTime){
+	double elapsedTime = 0.0;
+
+	while (elapsedTime < totalSimTime) {
 		double temp = (float)rand() / (float)RAND_MAX;
 		double randVar = -log(1.00 - temp) / lambda;
-
-		randomValArray[i] = randVar;
+	
+		randomValArray.push_back(randVar);
+		elapsedTime += randVar;
 	}
 }
 
-template<std::size_t SIZE1, std::size_t SIZE2, std::size_t SIZE3>
-void genDepartEvents(std::array<double, SIZE1>& arrivalValues, std::array<double, SIZE2>& departValues, std::array<EventOb, SIZE3>& departEvents) {
+
+void genObserverEvents(vector<EventOb>& observeEvents, int sampleRate, const double totalSimTime) {
+	double elapsedTime = 0.0;
+	int eventId = 0;
+
+	while (elapsedTime < totalSimTime) {
+		double temp = (float)rand() / (float)RAND_MAX;
+		double randVar = -log(1.00 - temp) / sampleRate;
+		elapsedTime += randVar;
+
+		EventOb event;
+		event.id = eventId;
+		event.eventType = EventType::Observer;
+		event.instTime = elapsedTime;
+		observeEvents.push_back(event);
+
+		eventId++;
+	}
+}
+
+void genDepartEvents(vector<double>& arrivalValues, vector<double>& departValues, vector<EventOb>& departEvents, const double totalSimTime) {
 
 	std::queue<double> departQueue;
 	int arrIndex = 0;
 	int departIndex = 0;
 	double elapsedTime = 0;
 
-	departQueue.push(departValues[arrIndex]);
-	elapsedTime += arrivalValues[arrIndex];
-	arrIndex++;
-
-	while (arrIndex < arrivalValues.size()){
+	while (elapsedTime < totalSimTime) {
 		
-		if (departQueue.empty() || (departQueue.front() > arrivalValues[arrIndex])) {
-			double timePassed = arrivalValues[arrIndex];
+		if (departQueue.empty() || (departQueue.front() > arrivalValues.at(arrIndex))) {
+			double timePassed = arrivalValues.at(arrIndex);
 			
 			if (!departQueue.empty()) {
-				// Does this work ?
 				departQueue.front() = departQueue.front() - timePassed;
 			}
 
 			elapsedTime += timePassed;
-			departQueue.push(departValues[arrIndex]);
+
+			if (elapsedTime >= totalSimTime) break;
+			departQueue.push(departValues.at(arrIndex));
 			arrIndex++;
 		}
-		else if (departQueue.front() < arrivalValues[arrIndex]) {
+		else if (departQueue.front() < arrivalValues.at(arrIndex)) {
 			double timePassed = departQueue.front();
 			elapsedTime += timePassed;
+
+			if (elapsedTime >= totalSimTime) break;
 			departQueue.pop();
-			arrivalValues[arrIndex] -= timePassed;
+			arrivalValues.at(arrIndex) -= timePassed;
 			
-			departEvents[departIndex].id = departIndex;
-			departEvents[departIndex].instTime = elapsedTime;
-			departEvents[departIndex].eventType = EventType::Departure;
+			EventOb event;
+			event.id = departIndex;
+			event.instTime = elapsedTime;
+			event.eventType = EventType::Departure;
+			departEvents.push_back(event);
+
 			departIndex++;
 		} 
 	}
-
-	while(!departQueue.empty()) {
-		if (departIndex >= SIZE1) {
-			cerr << "Error: Depart Index Exceeded 1000" << endl;
-		}
-		double timePassed = departQueue.front();
-		elapsedTime += timePassed;
-		
-		departQueue.pop();
-		departEvents[departIndex].id = departIndex;
-		departEvents[departIndex].instTime = elapsedTime;
-		departEvents[departIndex].eventType = EventType::Departure;
-		departIndex++;
-	}
 }
 
-
+/*
 template<std::size_t SIZE1, std::size_t SIZE2, std::size_t SIZE3>
 void genDepartEvents(std::array<double, SIZE1>& arrivalValues, std::array<double, SIZE2>& departValues, std::array<EventOb, SIZE3>& departEvents, int capacity) {
 
@@ -166,24 +176,7 @@ void genDepartEvents(std::array<double, SIZE1>& arrivalValues, std::array<double
 		departIndex++;
 	}
 }
-
-
-
-
-template<std::size_t SIZE>
-void genObserverEvents(std::array<EventOb, SIZE>& observeEvents, int sampleRate) {
-	double sum = 0.0;
-	for (int i = 0; i < observeEvents.size(); i++){
-
-		double temp = (float)rand() / (float)RAND_MAX;
-		double randomTime = -log(1 - temp) / sampleRate;
-		sum += randomTime;
-
-		observeEvents[i].id = i;
-		observeEvents[i].eventType = EventType::Observer;
-		observeEvents[i].instTime = sum;
-	}
-}
+*/
 
 bool compare(const EventOb& e1, const EventOb& e2) {
 	return e1.instTime < e2.instTime;
@@ -333,11 +326,11 @@ void runDESimulatorFiniteBuffer(array<EventOb, SIZE> allEvents, int capacity) {
 
 int main() {
 	const int SAMPLE_SIZE = 1000;
-	std::array<double, SAMPLE_SIZE> arrivalValues;
-	std::array<EventOb, SAMPLE_SIZE> arrivalEvents;
-	std::array<double, SAMPLE_SIZE> departValues;
-	std::array<EventOb, SAMPLE_SIZE> departEvents;
-	std::array<EventOb, SAMPLE_SIZE*6> observeEvents;
+	std::vector<double> arrivalValues;
+	std::vector<EventOb> arrivalEvents;
+	std::vector<double> departValues;
+	std::vector<EventOb> departEvents;
+	std::vector<EventOb> observeEvents;
 
 	/* Normal Parameters */
 	int serviceRate = 25;
