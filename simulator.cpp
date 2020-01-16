@@ -399,7 +399,7 @@ int main() {
 	/* For the Finite Queue */
 	//genDepartEvents(arrivalValues, arrivalEvents, SERVICE_RATE, departEvents, TOTAL_SIMTIME, QUEUE_CAPACITY);
 
-	/*genObserverEvents(observeEvents, ARRIVAL_RATE*6, TOTAL_SIMTIME);
+	genObserverEvents(observeEvents, ARRIVAL_RATE*6, TOTAL_SIMTIME);
 
 
 	vector<EventOb> allEvents;
@@ -417,26 +417,31 @@ int main() {
 
 	sort(allEvents.begin(), allEvents.end(), compare);
 
-	vector<Statistics> stats = runDESimulator(allEvents);
-
 	// Test that all events are in order
-	// Result: No Errors Here so far.
-	for (int i = 0; i < allEvents.size() - 1; i++) {
-		if (allEvents[i].instTime >= allEvents[i+1].instTime) {
+	vector<EventOb>::iterator it = allEvents.begin();
+	double previousTime = it->instTime;
+	it++;
+	for (; it != allEvents.end(); ++it) {
+		double currentTime = it->instTime;
+		if (previousTime > currentTime) {
 			cerr << "Error: Misordering of events in timing" << endl;
 			exit(1);
 		}
+		previousTime = currentTime;
 	}
 
+	vector<Statistics> stats = runDESimulator(allEvents);
+
+	
 	ofstream myfile;
 	myfile.open("data/output.csv");
 	myfile << "Row-Value, " << ((float)ARRIVAL_RATE / (float)SERVICE_RATE) << endl;
-	myfile << "Av. No. of Packets in Buffer, " << (stats.end())->avgPacketsInQueue << endl;
-	myfile << "Idle Time Percent, " << (stats.end())->idleTime << endl;
+	myfile << "Av. No. of Packets in Buffer, " << prev(stats.end())->avgPacketsInQueue << endl;
+	myfile << "Idle Time Percent, " << prev(stats.end())->idleTime << endl;
 	myfile.close();
 
 	//printTest1Results();
-	return 0;*/
+	return 0;
 }
 
 
