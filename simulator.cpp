@@ -376,91 +376,100 @@ int main() {
 	/* Normal Parameters */
 	// Parameters are scaled up by 1000 for convenience
 	const int SERVICE_RATE = 1000000;
-	double ROW_CONST = 0.25;
-	double ARRIVAL_RATE = SERVICE_RATE * ROW_CONST;
-	double packLength = 2000.0;
+	const double packLength = 2000.0;
 	const int TOTAL_SIMTIME = 1000; // not scaled 
 	const int QUEUE_CAPACITY = 10;
 
-	/* Test Case 1: Arrival Significantly Faster than Departure */
-	//int arrivalRate = 25;
-	//int serviceRate = 5;
-	// Result: was good
+	ofstream myfile;
+	myfile.open("data/output.csv");
+	myfile << "Row Constant Value, Av. No. Packets in Buffer, Idle Time %" << endl;
 	
-	/* Test Case 2: Departure Significantly Slower than Arrival */
-	/*int arrivalRate = 5;
-	int serviceRate = 50;*/
-	// Result: was good
+	for (double ROW_CONST = 0.25; ROW_CONST < 3; ROW_CONST += 0.1) {
 
-	genArrivalEvents(arrivalValues, arrivalEvents, 
+		double ARRIVAL_RATE = SERVICE_RATE * ROW_CONST;
+
+
+		/* Test Case 1: Arrival Significantly Faster than Departure */
+		//int arrivalRate = 25;
+		//int serviceRate = 5;
+		// Result: was good
+
+		/* Test Case 2: Departure Significantly Slower than Arrival */
+		/*int arrivalRate = 5;
+		int serviceRate = 50;*/
+		// Result: was good
+
+		genArrivalEvents(arrivalValues, arrivalEvents,
 			EventType::Arrival, ARRIVAL_RATE, TOTAL_SIMTIME);
 
-	/* For Infinite Queue */
-	double lambdaForDepartEvents = SERVICE_RATE / packLength;
-	genDepartEvents(arrivalValues, lambdaForDepartEvents, departEvents, TOTAL_SIMTIME);
+		/* For Infinite Queue */
+		double lambdaForDepartEvents = SERVICE_RATE / packLength;
+		genDepartEvents(arrivalValues, lambdaForDepartEvents, departEvents, TOTAL_SIMTIME);
 
-	/* For the Finite Queue */
-	//genDepartEvents(arrivalValues, arrivalEvents, lambdaForDepartEvents, departEvents, TOTAL_SIMTIME, QUEUE_CAPACITY);
+		/* For the Finite Queue */
+		//genDepartEvents(arrivalValues, arrivalEvents, lambdaForDepartEvents, departEvents, TOTAL_SIMTIME, QUEUE_CAPACITY);
 
-	genObserverEvents(observeEvents, ARRIVAL_RATE*6, TOTAL_SIMTIME);
+		genObserverEvents(observeEvents, ARRIVAL_RATE * 6, TOTAL_SIMTIME);
 
 
-	vector<EventOb> allEvents;
-	for (int i = 0; i < arrivalEvents.size(); i++) {
-		allEvents.push_back(arrivalEvents[i]);
-	}
-	int baseIndex = arrivalEvents.size();
-	for (int i = 0; i < departEvents.size(); i++) {
-		allEvents.push_back(departEvents[i]);
-	}
-	baseIndex += departEvents.size();
-	for (int i = 0; i < observeEvents.size(); i++) {
-		allEvents.push_back(observeEvents[i]);
-	}
-
-	sort(allEvents.begin(), allEvents.end(), compare);
-
-	// Test that all events are in order
-	vector<EventOb>::iterator it = allEvents.begin();
-	double previousTime = it->instTime;
-	it++;
-	for (; it != allEvents.end(); ++it) {
-		double currentTime = it->instTime;
-		if (previousTime > currentTime) {
-			cerr << "Error: Misordering of events in timing" << endl;
-			exit(1);
+		vector<EventOb> allEvents;
+		for (int i = 0; i < arrivalEvents.size(); i++) {
+			allEvents.push_back(arrivalEvents[i]);
 		}
-		previousTime = currentTime;
+		int baseIndex = arrivalEvents.size();
+		for (int i = 0; i < departEvents.size(); i++) {
+			allEvents.push_back(departEvents[i]);
+		}
+		baseIndex += departEvents.size();
+		for (int i = 0; i < observeEvents.size(); i++) {
+			allEvents.push_back(observeEvents[i]);
+		}
+
+		sort(allEvents.begin(), allEvents.end(), compare);
+
+		// Test that all events are in order
+		vector<EventOb>::iterator it = allEvents.begin();
+		double previousTime = it->instTime;
+		it++;
+		for (; it != allEvents.end(); ++it) {
+			double currentTime = it->instTime;
+			if (previousTime > currentTime) {
+				cerr << "Error: Misordering of events in timing" << endl;
+				exit(1);
+			}
+			previousTime = currentTime;
+		}
+
+		vector<Statistics> stats = runDESimulator(allEvents);
+
+		// Print statistics
+		double idleRatio = 0.0;
+		double averagePacketsInQueue = 0.0;
+		vector<Statistics>::iterator itStats = stats.end();
+		itStats--;
+		itStats--;
+		const int SAMPLES_COLLECTED = 7;
+		for (int i = 0; i < SAMPLES_COLLECTED; i++, itStats--) {
+			cout << "idle time: " << itStats->idleTime << endl;
+			idleRatio += itStats->idleTime;
+			cout << "AVG_PACKETS: " << itStats->avgPacketsInQueue << endl;
+			averagePacketsInQueue += itStats->avgPacketsInQueue;
+		}
+
+
+		myfile << ((float)ARRIVAL_RATE / (float)SERVICE_RATE) << ",";
+		myfile << (averagePacketsInQueue / (float)SAMPLES_COLLECTED) << ",";
+		myfile << (idleRatio / (float)SAMPLES_COLLECTED) << endl;
+
+
+		arrivalValues.clear();
+		arrivalEvents.clear();
+		departValues.clear();
+		departEvents.clear();
+		observeEvents.clear();
+		stats.clear();
+		allEvents.clear();
 	}
-
-	vector<Statistics> stats = runDESimulator(allEvents);
-
-	arrivalValues.clear();
-	arrivalEvents.clear();
-	departValues.clear();
-	departEvents.clear();
-	observeEvents.clear();
-
-
-	// Print statistics
-	ofstream myfile;
-	double idleRatio = 0.0;
-	double averagePacketsInQueue = 0.0;
-	vector<Statistics>::iterator itStats = stats.end();
-	itStats--;
-	itStats--;
-	const int SAMPLES_COLLECTED = 7;
-	for (int i = 0; i < SAMPLES_COLLECTED; i++, itStats--) {
-		cout << "idle time: " << itStats->idleTime << endl;
-		idleRatio += itStats->idleTime;
-		cout << "AVG_PACKETS: " << itStats->avgPacketsInQueue << endl;
-		averagePacketsInQueue += itStats->avgPacketsInQueue;
-	}
-
-	myfile.open("data/output.csv");
-	myfile << "Row-Value, " << ((float)ARRIVAL_RATE / (float)SERVICE_RATE) << endl;
-	myfile << "Av. No. of Packets in Buffer, " << averagePacketsInQueue / (float)SAMPLES_COLLECTED << endl;
-	myfile << "Idle Time Percent, " << idleRatio / (float)SAMPLES_COLLECTED << endl;
 	myfile.close();
 
 	//printTest1Results();
