@@ -81,6 +81,7 @@ void genObserverEvents(vector<EventOb>& observeEvents, int sampleRate, const dou
 	}
 }
 
+// Note: I need everything to get scaled up by 1000 or numbers will be too small
 void genDepartEvents(vector<double>& arrivalValues, const int serviceRate, vector<EventOb>& departEvents, const double totalSimTime) {
 
 	std::queue<double> departQueue;
@@ -373,9 +374,12 @@ int main() {
 	std::vector<EventOb> observeEvents;
 
 	/* Normal Parameters */
+	// Parameters are scaled up by 1000 for convenience
 	const int SERVICE_RATE = 1000000;
-	const int ARRIVAL_RATE = 250000;
-	const int TOTAL_SIMTIME = 10; // 1000
+	double ROW_CONST = 0.25;
+	double ARRIVAL_RATE = SERVICE_RATE * ROW_CONST;
+	double packLength = 2000.0;
+	const int TOTAL_SIMTIME = 1000; // not scaled 
 	const int QUEUE_CAPACITY = 10;
 
 	/* Test Case 1: Arrival Significantly Faster than Departure */
@@ -388,16 +392,15 @@ int main() {
 	int serviceRate = 50;*/
 	// Result: was good
 
-	double queueUtilization = (float)ARRIVAL_RATE / (float)SERVICE_RATE;
-
 	genArrivalEvents(arrivalValues, arrivalEvents, 
 			EventType::Arrival, ARRIVAL_RATE, TOTAL_SIMTIME);
 
 	/* For Infinite Queue */
-	genDepartEvents(arrivalValues, SERVICE_RATE, departEvents, TOTAL_SIMTIME);
+	double lambdaForDepartEvents = SERVICE_RATE / packLength;
+	genDepartEvents(arrivalValues, lambdaForDepartEvents, departEvents, TOTAL_SIMTIME);
 
 	/* For the Finite Queue */
-	//genDepartEvents(arrivalValues, arrivalEvents, SERVICE_RATE, departEvents, TOTAL_SIMTIME, QUEUE_CAPACITY);
+	//genDepartEvents(arrivalValues, arrivalEvents, lambdaForDepartEvents, departEvents, TOTAL_SIMTIME, QUEUE_CAPACITY);
 
 	genObserverEvents(observeEvents, ARRIVAL_RATE*6, TOTAL_SIMTIME);
 
@@ -432,7 +435,13 @@ int main() {
 
 	vector<Statistics> stats = runDESimulator(allEvents);
 
-	
+	arrivalValues.clear();
+	arrivalEvents.clear();
+	departValues.clear();
+	departEvents.clear();
+	observeEvents.clear();
+
+
 	// Print statistics
 	ofstream myfile;
 	double idleRatio = 0.0;
