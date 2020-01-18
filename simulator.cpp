@@ -381,12 +381,12 @@ int main() {
 	const int QUEUE_CAPACITY = 10;
 
 	ofstream myfile;
-	myfile.open("data/output.csv");
+	myfile.open("data/output4.csv");
 	myfile << "Row Constant Value, Av. No. Packets in Buffer, Idle Time %" << endl;
 	
-	for (double ROW_CONST = 0.25; ROW_CONST < 3; ROW_CONST += 0.1) {
+	for (double ROW_CONST = 0.25; ROW_CONST < 0.3; ROW_CONST += 0.1) {
 
-		double ARRIVAL_RATE = SERVICE_RATE * ROW_CONST;
+		double ARRIVAL_RATE = SERVICE_RATE * ROW_CONST / packLength;
 
 
 		/* Test Case 1: Arrival Significantly Faster than Departure */
