@@ -8,6 +8,7 @@
 #include <queue>
 #include <vector>
 #include <fstream>
+#include <time.h>
 
 using namespace std;
 
@@ -38,17 +39,21 @@ void genArrivalEvents(vector<double>& randValuesArray, vector<EventOb>& randVarA
 	int eventId = 0;
 
 	while (elapsedTime < totalSimTime) {
+		double temp = (float)rand() / (float)RAND_MAX;
+		randVar = -log(1.00 - temp) / lambda;
+		if (isinf(randVar)) {
+			cout << "Infinity detected: continue executed in for" << endl;
+			continue;
+		}
+
 		EventOb event;
 		event.id = eventId;
 		event.eventType = eType;
 
-		double temp = (float)rand() / (float)RAND_MAX;
-		randVar = -log(1.00 - temp) / lambda;
-
 		elapsedTime += randVar;
 		event.instTime = elapsedTime;
-		randVarArray.push_back(event);
 
+		randVarArray.push_back(event);
 		randValuesArray.push_back(randVar);
 		eventId++;
 	}
@@ -56,8 +61,12 @@ void genArrivalEvents(vector<double>& randValuesArray, vector<EventOb>& randVarA
 
 // Individual, non-accumulated values
 double genRandomValue(int lambda, const double totalSimTime){
-	double temp = (float)rand() / (float)RAND_MAX;
-	return (-log(1.00 - temp) / (float)lambda);
+	double randVar;
+	do {
+		double temp = (float)rand() / (float)RAND_MAX;
+		randVar = -log(1.00 - temp) / (float)lambda;
+	} while (isinf(randVar));
+	return randVar;
 }
 
 
@@ -68,6 +77,11 @@ void genObserverEvents(vector<EventOb>& observeEvents, int sampleRate, const dou
 	while (elapsedTime < totalSimTime) {
 		double temp = (float)rand() / (float)RAND_MAX;
 		double randVar = -log(1.00 - temp) / sampleRate;
+		if (isinf(randVar)) {
+			cout << "Infinity detected: continue executed in for" << endl;
+			continue;
+		}
+
 		elapsedTime += randVar;
 
 		EventOb event;
@@ -79,20 +93,20 @@ void genObserverEvents(vector<EventOb>& observeEvents, int sampleRate, const dou
 
 		eventId++;
 	}
+	//cout << observeEvents.back().instTime << endl;
 }
 
 // Note: I need everything to get scaled up by 1000 or numbers will be too small
 void genDepartEvents(vector<double>& arrivalValues, const int serviceRate, vector<EventOb>& departEvents, const double totalSimTime) {
 
 	std::queue<double> departQueue;
-	int arrIndex = 0;
+	vector<double>::iterator arrivalIterator = arrivalValues.begin();
 	int eventIndex = 0;
 	double elapsedTime = 0;
 
-	while (elapsedTime < totalSimTime) {
-		
-		if (departQueue.empty() || (departQueue.front() > arrivalValues.at(arrIndex))) {
-			double timePassed = arrivalValues.at(arrIndex);
+	while (elapsedTime < totalSimTime && arrivalIterator != arrivalValues.end()) {
+		if (departQueue.empty() || (departQueue.front() > *arrivalIterator)) {
+			double timePassed = *arrivalIterator;
 			
 			if (!departQueue.empty()) {
 				departQueue.front() = departQueue.front() - timePassed;
@@ -102,15 +116,15 @@ void genDepartEvents(vector<double>& arrivalValues, const int serviceRate, vecto
 
 			if (elapsedTime >= totalSimTime) break;
 			departQueue.push(genRandomValue(serviceRate, totalSimTime));
-			arrIndex++;
+			arrivalIterator++;
 		}
-		else if (departQueue.front() < arrivalValues.at(arrIndex)) {
+		else if (departQueue.front() < *arrivalIterator) {
 			double timePassed = departQueue.front();
 			elapsedTime += timePassed;
 
 			if (elapsedTime >= totalSimTime) break;
 			departQueue.pop();
-			arrivalValues.at(arrIndex) -= timePassed;
+			(*arrivalIterator) -= timePassed;
 			
 			EventOb event;
 			event.id = eventIndex;
@@ -137,7 +151,7 @@ void genDepartEvents(vector<double>& arrivalValues, const int serviceRate, vecto
 			eventIndex++;
 
 			departQueue.push(genRandomValue(serviceRate, totalSimTime));
-			arrIndex++;
+			arrivalIterator++;
 		}
 	}
 }
@@ -233,7 +247,12 @@ vector<Statistics> runDESimulator(vector<EventOb> allEvents) {
 
 	int sumOfPacketsInQueueAllFrames = 0;
 
+	cout << "No. Arrivals, No. Departures, No. Observers -- Before exiting simulator" << endl;
 	for (EventOb& event : allEvents) {
+		if (isinf(event.instTime)) {
+			cout << arrivals << "," << departures << "," << observations << endl;
+			//break;
+		}
 		switch (event.eventType) {
 			case EventType::Arrival:
 				if (eventQueue.empty()) {
@@ -367,9 +386,11 @@ vector<Statistics> runDESimulatorFiniteBuffer(vector<EventOb> allEvents, int cap
 }*/
 
 int main() {
+
+	srand(time(0));
+
 	std::vector<double> arrivalValues;
 	std::vector<EventOb> arrivalEvents;
-	std::vector<double> departValues;
 	std::vector<EventOb> departEvents;
 	std::vector<EventOb> observeEvents;
 
@@ -381,11 +402,10 @@ int main() {
 	const int QUEUE_CAPACITY = 10;
 
 	ofstream myfile;
-	myfile.open("data/output4.csv");
+	myfile.open("data/output7.csv");
 	myfile << "Row Constant Value, Av. No. Packets in Buffer, Idle Time %" << endl;
 	
-	for (double ROW_CONST = 0.25; ROW_CONST < 0.3; ROW_CONST += 0.1) {
-
+	for (double ROW_CONST = 0.25; ROW_CONST < 1; ROW_CONST += 0.1) {
 		double ARRIVAL_RATE = SERVICE_RATE * ROW_CONST / packLength;
 
 
@@ -402,6 +422,14 @@ int main() {
 		genArrivalEvents(arrivalValues, arrivalEvents,
 			EventType::Arrival, ARRIVAL_RATE, TOTAL_SIMTIME);
 
+		// double-check sum
+		/*double theSum = 0.0;
+		for (int i = 0; i < arrivalValues.size() - 1; i++) {
+			theSum += arrivalValues.at(i);
+			//cout << theSum << endl;
+		}*/
+		//cout << theSum / arrivalValues.size() << endl;
+
 		/* For Infinite Queue */
 		double lambdaForDepartEvents = SERVICE_RATE / packLength;
 		genDepartEvents(arrivalValues, lambdaForDepartEvents, departEvents, TOTAL_SIMTIME);
@@ -412,23 +440,16 @@ int main() {
 		genObserverEvents(observeEvents, ARRIVAL_RATE * 6, TOTAL_SIMTIME);
 
 
-		vector<EventOb> allEvents;
-		for (int i = 0; i < arrivalEvents.size(); i++) {
-			allEvents.push_back(arrivalEvents[i]);
-		}
-		int baseIndex = arrivalEvents.size();
-		for (int i = 0; i < departEvents.size(); i++) {
-			allEvents.push_back(departEvents[i]);
-		}
-		baseIndex += departEvents.size();
-		for (int i = 0; i < observeEvents.size(); i++) {
-			allEvents.push_back(observeEvents[i]);
-		}
-
+		vector<EventOb> allEvents(arrivalEvents);
+		vector<EventOb>::iterator evIterator = allEvents.end();
+		allEvents.insert(evIterator, departEvents.begin(), departEvents.end());
+		evIterator = allEvents.end();
+		allEvents.insert(evIterator, observeEvents.begin(), observeEvents.end());
+		
 		sort(allEvents.begin(), allEvents.end(), compare);
 
 		// Test that all events are in order
-		vector<EventOb>::iterator it = allEvents.begin();
+		/*vector<EventOb>::iterator it = allEvents.begin();
 		double previousTime = it->instTime;
 		it++;
 		for (; it != allEvents.end(); ++it) {
@@ -438,7 +459,15 @@ int main() {
 				exit(1);
 			}
 			previousTime = currentTime;
-		}
+		}*/
+
+		// Result is that last one is undefined, other last 2 are inf
+		/*it = allEvents.end();
+		it--;
+		cout << "AllEvents last few elements" << endl;
+		for (int i = 0; i < 10; i++, it--) {
+			cout << it->instTime << endl << endl;
+		}*/
 
 		vector<Statistics> stats = runDESimulator(allEvents);
 
@@ -447,24 +476,27 @@ int main() {
 		double averagePacketsInQueue = 0.0;
 		vector<Statistics>::iterator itStats = stats.end();
 		itStats--;
-		itStats--;
-		const int SAMPLES_COLLECTED = 7;
+		const int SAMPLES_COLLECTED = 4;
 		for (int i = 0; i < SAMPLES_COLLECTED; i++, itStats--) {
-			cout << "idle time: " << itStats->idleTime << endl;
+			if (isinf(itStats->idleTime) || itStats->idleTime == 0) {
+				cerr << "Error: bad idleTime value: " << itStats->idleTime << endl;
+				exit(1);
+			}
 			idleRatio += itStats->idleTime;
-			cout << "AVG_PACKETS: " << itStats->avgPacketsInQueue << endl;
+			if (isinf(itStats->avgPacketsInQueue) || itStats->avgPacketsInQueue == 0) {
+				cerr << "Error: bad idleTime value: " << itStats->avgPacketsInQueue << endl;
+				exit(1);
+			}
 			averagePacketsInQueue += itStats->avgPacketsInQueue;
 		}
 
 
-		myfile << ((float)ARRIVAL_RATE / (float)SERVICE_RATE) << ",";
+		myfile << ROW_CONST << ",";
 		myfile << (averagePacketsInQueue / (float)SAMPLES_COLLECTED) << ",";
 		myfile << (idleRatio / (float)SAMPLES_COLLECTED) << endl;
 
-
 		arrivalValues.clear();
 		arrivalEvents.clear();
-		departValues.clear();
 		departEvents.clear();
 		observeEvents.clear();
 		stats.clear();
