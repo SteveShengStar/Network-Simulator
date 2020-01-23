@@ -9,6 +9,7 @@
 #include <vector>
 #include <fstream>
 #include <time.h>
+#include <string>
 
 using namespace std;
 
@@ -39,7 +40,9 @@ void genArrivalEvents(vector<double>& randValuesArray, vector<EventOb>& randVarA
 	int eventId = 0;
 
 	while (elapsedTime < totalSimTime) {
-		double temp = (float)rand() / (float)RAND_MAX;
+		int randomTemp = rand();
+		if (randomTemp == RAND_MAX) { randomTemp = RAND_MAX - 1; }
+		double temp = (float)randomTemp / (float)RAND_MAX;
 		randVar = -log(1.00 - temp) / lambda;
 		if (isinf(randVar)) {
 			cout << "Infinity detected: continue executed in for" << endl;
@@ -63,7 +66,9 @@ void genArrivalEvents(vector<double>& randValuesArray, vector<EventOb>& randVarA
 double genRandomValue(int lambda, const double totalSimTime){
 	double randVar;
 	do {
-		double temp = (float)rand() / (float)RAND_MAX;
+		int randomTemp = rand();
+		if (randomTemp == RAND_MAX) { randomTemp = RAND_MAX - 1; }
+		double temp = (float)randomTemp / (float)RAND_MAX;
 		randVar = -log(1.00 - temp) / (float)lambda;
 	} while (isinf(randVar));
 	return randVar;
@@ -75,7 +80,9 @@ void genObserverEvents(vector<EventOb>& observeEvents, int sampleRate, const dou
 	int eventId = 0;
 
 	while (elapsedTime < totalSimTime) {
-		double temp = (float)rand() / (float)RAND_MAX;
+		int randomTemp = rand();
+		if (randomTemp == RAND_MAX) { randomTemp = RAND_MAX - 1; }
+		double temp = (float)randomTemp / (float)RAND_MAX;
 		double randVar = -log(1.00 - temp) / sampleRate;
 		if (isinf(randVar)) {
 			cout << "Infinity detected: continue executed in for" << endl;
@@ -99,48 +106,56 @@ void genObserverEvents(vector<EventOb>& observeEvents, int sampleRate, const dou
 // Note: I need everything to get scaled up by 1000 or numbers will be too small
 void genDepartEvents(vector<double>& arrivalValues, const int serviceRate, vector<EventOb>& departEvents, const double totalSimTime) {
 
-	std::queue<double> departQueue;
+	std::queue<double> waitQueue;
 	vector<double>::iterator arrivalIterator = arrivalValues.begin();
 	int eventIndex = 0;
 	double elapsedTime = 0;
+	int arrIndex = 0;
+	int departCount = 0;
 
 	while (elapsedTime < totalSimTime && arrivalIterator != arrivalValues.end()) {
-		if (departQueue.empty() || (departQueue.front() > *arrivalIterator)) {
-			double timePassed = *arrivalIterator;
-			
-			if (!departQueue.empty()) {
-				departQueue.front() = departQueue.front() - timePassed;
-			}
-
-			elapsedTime += timePassed;
-
+		if (waitQueue.empty()) {
+			elapsedTime += *arrivalIterator;
+			arrIndex++;
 			if (elapsedTime >= totalSimTime) break;
-			departQueue.push(genRandomValue(serviceRate, totalSimTime));
 			arrivalIterator++;
-		}
-		else if (departQueue.front() < *arrivalIterator) {
-			double timePassed = departQueue.front();
-			elapsedTime += timePassed;
 
+			waitQueue.push(genRandomValue(serviceRate, totalSimTime));
+		}
+		else if (waitQueue.front() < *arrivalIterator) {
+			elapsedTime += waitQueue.front();
 			if (elapsedTime >= totalSimTime) break;
-			departQueue.pop();
-			(*arrivalIterator) -= timePassed;
+			*arrivalIterator -= waitQueue.front();
+
+			waitQueue.pop();
 			
+			// Create new Departure Event
 			EventOb event;
 			event.id = eventIndex;
 			event.instTime = elapsedTime;
 			event.eventType = EventType::Departure;
 			event.packetDropped = false;
 			departEvents.push_back(event);
+			departCount++;
 
 			eventIndex++;
+		}
+		else if (waitQueue.front() > *arrivalIterator) {
+			elapsedTime += *arrivalIterator;
+			arrIndex++;
+			if (elapsedTime >= totalSimTime) break;
+			waitQueue.front() -= *arrivalIterator;
+			arrivalIterator++;
+
+			waitQueue.push(genRandomValue(serviceRate, totalSimTime));
 		}
 		else {
-			double timePassed = departQueue.front();
-			elapsedTime += timePassed;
-
+			elapsedTime += *arrivalIterator;
+			arrIndex++;
 			if (elapsedTime >= totalSimTime) break;
-			departQueue.pop();
+			arrivalIterator++;
+			waitQueue.pop();
+			waitQueue.push(genRandomValue(serviceRate, totalSimTime));
 
 			EventOb event;
 			event.id = eventIndex;
@@ -148,10 +163,12 @@ void genDepartEvents(vector<double>& arrivalValues, const int serviceRate, vecto
 			event.eventType = EventType::Departure;
 			event.packetDropped = false;
 			departEvents.push_back(event);
-			eventIndex++;
+			departCount++;
 
-			departQueue.push(genRandomValue(serviceRate, totalSimTime));
-			arrivalIterator++;
+			eventIndex++;
+		}
+		if (departCount > arrIndex) {
+			cout << "BAD" << endl;
 		}
 	}
 }
@@ -226,7 +243,7 @@ void genDepartEvents(vector<double>& arrivalValues, vector<EventOb>& arrivalEven
 
 
 bool compare(const EventOb& e1, const EventOb& e2) {
-	return e1.instTime < e2.instTime;
+	return (e1.instTime < e2.instTime);
 }
 
 vector<Statistics> runDESimulator(vector<EventOb> allEvents) {
@@ -264,8 +281,13 @@ vector<Statistics> runDESimulator(vector<EventOb> allEvents) {
 				arrivals++;
 				break;
 			case EventType::Departure:
-				eventQueue.pop();
 				departures++;
+				if (eventQueue.empty()) { 
+					cout << "Event Queue detected as empty" << endl;
+					cout << "Departure No.: " << departures << endl;
+					continue;
+				}
+				eventQueue.pop();
 
 				if (eventQueue.empty()) {
 					queueState.activeTime += event.instTime - lastTimeCheckpoint;
@@ -384,6 +406,19 @@ vector<Statistics> runDESimulatorFiniteBuffer(vector<EventOb> allEvents, int cap
 	double variance = numerator / 999;
 	cout << "Variance: " << variance << endl;
 }*/
+string printEventType(EventOb event) {
+	switch (event.eventType) {
+	case EventType::Arrival:
+		return "Arrival";
+		break;
+	case EventType::Departure:
+		return "Departure";
+		break;
+	case EventType::Observer:
+		return "Observation";
+		break;
+	}
+}
 
 int main() {
 
@@ -407,7 +442,7 @@ int main() {
 	
 	for (double ROW_CONST = 0.25; ROW_CONST < 1; ROW_CONST += 0.1) {
 		double ARRIVAL_RATE = SERVICE_RATE * ROW_CONST / packLength;
-
+		cout << "ROW_CONST: " << ROW_CONST << endl;
 
 		/* Test Case 1: Arrival Significantly Faster than Departure */
 		//int arrivalRate = 25;
@@ -438,6 +473,24 @@ int main() {
 		//genDepartEvents(arrivalValues, arrivalEvents, lambdaForDepartEvents, departEvents, TOTAL_SIMTIME, QUEUE_CAPACITY);
 
 		genObserverEvents(observeEvents, ARRIVAL_RATE * 6, TOTAL_SIMTIME);
+		// clean up the data here.
+		vector<EventOb>::iterator arrivalIt = arrivalEvents.begin();
+		vector<EventOb>::iterator departIt = departEvents.begin();
+		vector<int> problemIndices;
+		int itIndex = 0;
+		while (arrivalIt != arrivalEvents.end() && departIt != departEvents.end()) {
+			if (arrivalIt->instTime > departIt->instTime) {
+				cout << "Problem Detected: Manually removing a rogue departure event." << endl;
+				problemIndices.push_back(itIndex);
+			}
+			arrivalIt++;
+			departIt++;
+			itIndex++;
+		}
+		for (vector<int>::iterator it = problemIndices.begin(); it != problemIndices.end(); it++) {
+			departEvents.erase(departEvents.begin() + *it);
+		}
+		problemIndices.clear();
 
 
 		vector<EventOb> allEvents(arrivalEvents);
@@ -448,26 +501,71 @@ int main() {
 		
 		sort(allEvents.begin(), allEvents.end(), compare);
 
-		// Test that all events are in order
-		/*vector<EventOb>::iterator it = allEvents.begin();
-		double previousTime = it->instTime;
-		it++;
-		for (; it != allEvents.end(); ++it) {
-			double currentTime = it->instTime;
+
+		vector<EventOb>::iterator prev = allEvents.begin();
+ 		vector<EventOb>::iterator current = allEvents.begin();
+		current++;
+		while (current != allEvents.end()) {
+			// Actual Logic
+			if (prev->instTime == current->instTime) {
+				if (prev->eventType == EventType::Departure) {
+					swap(*prev, *current);
+				}
+			}
+			prev++;
+			current++;
+			
+			// Test that all events are in order
+			/*double currentTime = it->instTime;
 			if (previousTime > currentTime) {
 				cerr << "Error: Misordering of events in timing" << endl;
 				exit(1);
 			}
-			previousTime = currentTime;
-		}*/
+			if (previousTime == currentTime) {
+				cout << "Found Equal Times: " << endl;
+				cout << "Previous Event: ";
+				printEventType(previousEvent);
+				cout << endl;
+				cout << "Current Time: ";
+				printEventType(*it);
+				cout << endl;
+			}
+			previousEvent = *it;
+			previousTime = currentTime;*/
+		}
 
-		// Result is that last one is undefined, other last 2 are inf
-		/*it = allEvents.end();
-		it--;
-		cout << "AllEvents last few elements" << endl;
-		for (int i = 0; i < 10; i++, it--) {
-			cout << it->instTime << endl << endl;
-		}*/
+		int arrivalCount = 0;
+		int departCount = 0;
+		prev = allEvents.begin();
+		current = allEvents.begin();
+		switch (current->eventType) {
+		case EventType::Arrival:
+			arrivalCount++;
+			break;
+		case EventType::Departure:
+			departCount++;
+			break;
+		}
+		current++;
+		while (current != allEvents.end()) {
+			// Just for Debugging
+			switch (current->eventType) {
+			case EventType::Arrival:
+				arrivalCount++;
+				break;
+			case EventType::Departure:
+				departCount++;
+				break;
+			}
+			if (departCount > arrivalCount) {
+				cout << "CurrentEvent Time: " << current->instTime << endl;
+				cout << "CurrentEvent Event: " << printEventType(*current) << endl;
+				cout << "Previous Event: " << prev->instTime << endl;
+				cout << "Previous Event: " << printEventType(*prev) << endl;
+			}
+			current++;
+			prev++;
+		}
 
 		vector<Statistics> stats = runDESimulator(allEvents);
 
@@ -504,8 +602,36 @@ int main() {
 	}
 	myfile.close();
 
-	//printTest1Results();
 	return 0;
 }
+
+
+// Testing swapping
+//int main() {
+//	// attempt 1
+//	std::vector<int> v;
+//	v.push_back(22);
+//	v.push_back(33);
+//	v.push_back(44);
+//	v.push_back(55);
+//	v.push_back(66);
+//	v.push_back(77);
+//	v.push_back(88);
+//	std::vector<int>::iterator prev = v.begin();
+//	prev++;
+//	std::vector<int>::iterator current = v.begin();
+//	current++;
+//	current++;
+//	current++;
+//
+//	swap(*prev, *current);
+//	//cout << *prev << endl;
+//	//cout << *current << endl;
+//
+//	for (; prev != v.end(); prev++) {
+//		cout << *prev << endl;
+//	}
+//	exit(0);
+//}
 
 
