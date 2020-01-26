@@ -378,7 +378,9 @@ int main() {
 	const int QUEUE_CAPACITY = 10;
 
 	ofstream myfile;
-	myfile.open("data/output5.csv");
+	ofstream errorCount;
+	myfile.open("data/output1.csv");
+	errorCount.open("data/errors.txt");
 	myfile << "Row Constant Value, Av. No. Packets in Buffer, Idle Time %" << endl;
 	
 	for (double ROW_CONST = 0.25; ROW_CONST < 1; ROW_CONST += 0.1) {
@@ -470,7 +472,7 @@ int main() {
 			current++;
 			prev++;
 		}
-		myfile << amountOfErrorPoints << endl;
+		errorCount << amountOfErrorPoints << endl;
 
 
 		// Print statistics for MM1 Queue
@@ -481,6 +483,9 @@ int main() {
 		itStats--;
 		const int SAMPLES_COLLECTED = 4;
 		for (int i = 0; i < SAMPLES_COLLECTED; i++, itStats--) {
+			//cout << itStats->idleTime << endl;
+			//cout << itStats->avgPacketsInQueue << endl;
+
 			idleRatio += itStats->idleTime;
 			averagePacketsInQueue += itStats->avgPacketsInQueue;
 		}
@@ -498,6 +503,7 @@ int main() {
 		allEvents.clear();
 	}
 	myfile.close();
+	errorCount.close();
 
 	return 0;
 }
