@@ -13,7 +13,7 @@
 
 using namespace std;
 
-enum EventType {Arrival, Departure, Observer};
+enum EventType {Arrival, Departure, Observer, ArrivalDropped};
 struct EventOb {
 	int id;
 	EventType eventType;
@@ -154,69 +154,94 @@ void genDepartEvents(vector<double>& arrivalValues, const int serviceRate, vecto
 }
 
 
-void genDepartEvents(vector<double>& arrivalValues, vector<EventOb>& arrivalEvents, const int serviceRate, vector<EventOb>& departEvents, const double totalSimTime, const int capacity) {
+// For the finite queue implementation only
+void genEventSimEvents(vector<EventOb>& arrivalEvents, vector<EventOb>& departEvents, vector<EventOb>& arrivalDroppedEvents, const int arrivServiceRate, const int departServiceRate, const double totalSimTime, const int capacity) {
 
-	std::queue<double> departQueue;
-	int arrIndex = 0;
-	int eventIndex = 0;
-	double elapsedTime = 0;
+	std::queue<double> waitQueue;
+	double elapsedTime = 0.0;
+
+	// Generate the first packet and first arrival event
+	double pendingPacketArrivalTimeLeft = genRandomValue(arrivServiceRate, totalSimTime);
 
 	while (elapsedTime < totalSimTime) {
-
-		if (departQueue.empty() || (departQueue.front() > arrivalValues.front()) ) {
-			double timePassed = arrivalValues.front();
-			arrivalValues.erase(arrivalValues.begin());
-
-			if (!departQueue.empty()) {
-				departQueue.front() = departQueue.front() - timePassed;
-			}
+		if (waitQueue.empty()) {
+			double timePassed = pendingPacketArrivalTimeLeft;
 
 			elapsedTime += timePassed;
-
 			if (elapsedTime >= totalSimTime) break;
-			if (departQueue.size() + 1 > capacity) {
-				// Drop the packet
-				arrivalEvents.at(arrIndex).packetDropped = true;
-			} else {
-				departQueue.push(genRandomValue(serviceRate, totalSimTime));
-			}
-			arrIndex++;
-		}
-		else if (departQueue.front() < arrivalValues.front()) {
-			double timePassed = departQueue.front();
-			elapsedTime += timePassed;
 
-			if (elapsedTime >= totalSimTime) break;
-			departQueue.pop();
-			arrivalValues.front() -= timePassed;
 
 			EventOb event;
-			event.id = eventIndex;
+			event.instTime = elapsedTime;
+			event.eventType = EventType::Arrival;
+			event.packetDropped = false;
+			arrivalEvents.push_back(event);
+
+			// Push a new packet on to the queue 
+			// values in waitQueue will eventually be turned into departure events 
+			waitQueue.push(genRandomValue(departServiceRate, totalSimTime));
+			// Generate new arrival time for next proceeding packet
+			pendingPacketArrivalTimeLeft = genRandomValue(arrivServiceRate, totalSimTime);
+		}
+		else if (waitQueue.front() < pendingPacketArrivalTimeLeft) {
+			elapsedTime += waitQueue.front();
+			if (elapsedTime >= totalSimTime) break;
+			pendingPacketArrivalTimeLeft -= waitQueue.front();
+
+			waitQueue.pop();
+
+			// Create new Departure Event
+			EventOb event;
 			event.instTime = elapsedTime;
 			event.eventType = EventType::Departure;
 			event.packetDropped = false;
-
 			departEvents.push_back(event);
+		}
+		else if (waitQueue.front() > pendingPacketArrivalTimeLeft) {
+			elapsedTime += pendingPacketArrivalTimeLeft;
 
-			eventIndex++;
+			if (elapsedTime >= totalSimTime) break;
+			// Only drop the packet if queue size will exceed capacity
+			if (waitQueue.size() < capacity) {
+				EventOb event;
+				event.instTime = elapsedTime;
+				event.eventType = EventType::Arrival;
+				event.packetDropped = false;
+				arrivalEvents.push_back(event);
+
+				// Add the packet, which will eventually become a Departure Event
+				waitQueue.push(genRandomValue(departServiceRate, totalSimTime));
+			} else {
+				EventOb event;
+				event.instTime = elapsedTime;
+				event.eventType = EventType::ArrivalDropped;
+				event.packetDropped = true;
+				arrivalDroppedEvents.push_back(event);
+			}
+
+			waitQueue.front() -= pendingPacketArrivalTimeLeft;
+			pendingPacketArrivalTimeLeft = genRandomValue(arrivServiceRate, totalSimTime); // Calculate time for NEXT packet to arrive.
 		}
 		else {
-			double timePassed = departQueue.front();
-			elapsedTime += timePassed;
+			// The upcoming arrival event and departure event will happen at the same time 
+			elapsedTime += pendingPacketArrivalTimeLeft;
 
 			if (elapsedTime >= totalSimTime) break;
-			departQueue.pop();
+			pendingPacketArrivalTimeLeft = genRandomValue(arrivServiceRate, totalSimTime);
+			waitQueue.push(genRandomValue(departServiceRate, totalSimTime));
+			waitQueue.pop();
 
 			EventOb event;
-			event.id = eventIndex;
 			event.instTime = elapsedTime;
 			event.eventType = EventType::Departure;
 			event.packetDropped = false;
 			departEvents.push_back(event);
-			eventIndex++;
 
-			departQueue.push(genRandomValue(serviceRate, totalSimTime));
-			arrIndex++;
+			EventOb event1;
+			event1.instTime = elapsedTime;
+			event1.eventType = EventType::Arrival;
+			event1.packetDropped = false;
+			arrivalEvents.push_back(event1);
 		}
 	}
 }
@@ -292,8 +317,6 @@ vector<Statistics> runDESimulator(vector<EventOb> allEvents) {
 // Not tested
 vector<Statistics> runDESimulatorFiniteBuffer(vector<EventOb> allEvents, int capacity) {
 
-	int arrivals = 0;
-	int departures = 0;
 	int observations = 0;
 
 	queue<EventOb> eventQueue;
@@ -304,58 +327,58 @@ vector<Statistics> runDESimulatorFiniteBuffer(vector<EventOb> allEvents, int cap
 	queueState.activeTime = 0;
 	queueState.stateLabel = QueueStateLabel::IDLE;
 	double lastTimeCheckpoint = 0;
-	int droppedPackets = 0;
-
 
 	int sumOfPacketsInQueueAllFrames = 0;
+	int dropppedPackets = 0;
+	int arrivalCount = 0;
 
 	for (EventOb& event : allEvents) {
 		switch (event.eventType) {
 		case EventType::Arrival:
+			// Transition from Idle to Active
 			if (eventQueue.empty()) {
-				queueState.idleTime += event.instTime - lastTimeCheckpoint;
+				queueState.idleTime += (event.instTime - lastTimeCheckpoint);
 				queueState.stateLabel = QueueStateLabel::ACTIVE;
 				lastTimeCheckpoint = event.instTime;
-			} 
-			if (event.packetDropped == true) {
-				droppedPackets++;
-			} else {
-				eventQueue.push(event);
 			}
-			// TODO: remove
-			if (eventQueue.size() > capacity) {
-				cerr << "Error: Number packets exceeds buffer cap." << endl;
-				exit(1);
-			}
-			arrivals++;
+			eventQueue.push(event);
+			arrivalCount++;
 			break;
 		case EventType::Departure:
-			eventQueue.pop();
-			departures++;
-
 			if (eventQueue.empty()) {
-				queueState.activeTime += event.instTime - lastTimeCheckpoint;
+				cout << "Event Queue detected as empty" << endl;
+				continue;
+			}
+			eventQueue.pop();
+
+			// Transition from Active to Idle
+			if (eventQueue.empty()) {
+				queueState.activeTime += (event.instTime - lastTimeCheckpoint);
 				queueState.stateLabel = QueueStateLabel::IDLE;
 				lastTimeCheckpoint = event.instTime;
 			}
+
+			break;
+		case EventType::ArrivalDropped:
+			dropppedPackets++;
+			arrivalCount++;
 			break;
 		default:
 			observations++;
 			sumOfPacketsInQueueAllFrames += eventQueue.size();
 
-
 			if (queueState.stateLabel == QueueStateLabel::IDLE) {
-				queueState.idleTime += event.instTime - lastTimeCheckpoint;
+				queueState.idleTime += (event.instTime - lastTimeCheckpoint);
 			}
 			else {
-				queueState.activeTime += event.instTime - lastTimeCheckpoint;
+				queueState.activeTime += (event.instTime - lastTimeCheckpoint);
 			}
 			lastTimeCheckpoint = event.instTime;
 
 			Statistics stat;
 			stat.avgPacketsInQueue = (float)sumOfPacketsInQueueAllFrames / (float)observations;
 			stat.idleTime = queueState.idleTime / event.instTime;
-			stat.lossRatio = (float) droppedPackets / (float) arrivals;
+			stat.lossRatio = (float)dropppedPackets / (float)arrivalCount;
 			stats.push_back(stat);
 		}
 	}
@@ -368,6 +391,7 @@ int main() {
 
 	std::vector<double> arrivalValues;
 	std::vector<EventOb> arrivalEvents;
+	std::vector<EventOb> arrivalDroppedEvents;
 	std::vector<EventOb> departEvents;
 	std::vector<EventOb> observeEvents;
 
@@ -381,20 +405,19 @@ int main() {
 	ofstream errorCount;
 	myfile.open("data/output1.csv");
 	errorCount.open("data/errors.txt");
-	myfile << "Row Constant Value, Av. No. Packets in Buffer, Idle Time %" << endl;
+	myfile << "Row Constant Value, Av. No. Packets in Buffer, Idle Time %, Loss Ratio" << endl;
 	
 	for (double ROW_CONST = 0.25; ROW_CONST < 1; ROW_CONST += 0.1) {
 		double ARRIVAL_RATE = SERVICE_RATE * ROW_CONST / packLength;
-
-		genArrivalEvents(arrivalValues, arrivalEvents,
-			EventType::Arrival, ARRIVAL_RATE, TOTAL_SIMTIME);
+		double lambdaForDepartEvents = SERVICE_RATE / packLength;
 
 		/* For Infinite Queue */
-		double lambdaForDepartEvents = SERVICE_RATE / packLength;
-		genDepartEvents(arrivalValues, lambdaForDepartEvents, departEvents, TOTAL_SIMTIME);
+		/*genArrivalEvents(arrivalValues, arrivalEvents,
+			EventType::Arrival, ARRIVAL_RATE, TOTAL_SIMTIME);
+		genDepartEvents(arrivalValues, lambdaForDepartEvents, departEvents, TOTAL_SIMTIME);*/
 
 		/* For the Finite Queue */
-		//genDepartEvents(arrivalValues, arrivalEvents, lambdaForDepartEvents, departEvents, TOTAL_SIMTIME, QUEUE_CAPACITY);
+		genEventSimEvents(arrivalEvents, departEvents, arrivalDroppedEvents, ARRIVAL_RATE, lambdaForDepartEvents, TOTAL_SIMTIME, QUEUE_CAPACITY);
 
 		genObserverEvents(observeEvents, ARRIVAL_RATE * 6, TOTAL_SIMTIME);
 
@@ -424,6 +447,8 @@ int main() {
 		allEvents.insert(evIterator, departEvents.begin(), departEvents.end());
 		evIterator = allEvents.end();
 		allEvents.insert(evIterator, observeEvents.begin(), observeEvents.end());
+		evIterator = allEvents.end();
+		allEvents.insert(evIterator, arrivalDroppedEvents.begin(), arrivalDroppedEvents.end());
 		
 
 		// Sort Events based on simulation time
@@ -476,7 +501,7 @@ int main() {
 
 
 		// Print statistics for MM1 Queue
-		vector<Statistics> stats = runDESimulator(allEvents);
+		/*vector<Statistics> stats = runDESimulator(allEvents);
 		double idleRatio = 0.0;
 		double averagePacketsInQueue = 0.0;
 		vector<Statistics>::iterator itStats = stats.end();
@@ -493,10 +518,35 @@ int main() {
 
 		myfile << ROW_CONST << ",";
 		myfile << (averagePacketsInQueue / (float)SAMPLES_COLLECTED) << ",";
-		myfile << (idleRatio / (float)SAMPLES_COLLECTED) << endl;
+		myfile << (idleRatio / (float)SAMPLES_COLLECTED) << endl;*/
+
+		// Print statistics for MM1K Queue
+		vector<Statistics> stats = runDESimulatorFiniteBuffer(allEvents);
+		double idleRatio = 0.0;
+		double averagePacketsInQueue = 0.0;
+		vector<Statistics>::iterator itStats = stats.end();
+		itStats--;
+		double lossRatio = itStats->lossRatio;
+		const int SAMPLES_COLLECTED = 4;
+		for (int i = 0; i < SAMPLES_COLLECTED; i++, itStats--) {
+			//cout << itStats->idleTime << endl;
+			//cout << itStats->avgPacketsInQueue << endl;
+			cout << itStats->lossRatio << endl;
+
+			idleRatio += itStats->idleTime;
+			averagePacketsInQueue += itStats->avgPacketsInQueue;
+		}
+
+
+		myfile << ROW_CONST << ",";
+		myfile << (averagePacketsInQueue / (float)SAMPLES_COLLECTED) << ",";
+		myfile << (idleRatio / (float)SAMPLES_COLLECTED) << ",";
+		myfile << lossRatio << endl;
+
 
 		arrivalValues.clear();
 		arrivalEvents.clear();
+		arrivalDroppedEvents.clear();
 		departEvents.clear();
 		observeEvents.clear();
 		stats.clear();
