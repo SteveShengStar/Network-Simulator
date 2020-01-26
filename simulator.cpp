@@ -43,10 +43,6 @@ void genArrivalEvents(vector<double>& randValuesArray, vector<EventOb>& randVarA
 		int randomTemp = rand();
 		double temp = (float)randomTemp / (float)(RAND_MAX+1);
 		randVar = -log(1.00 - temp) / lambda;
-		if (isinf(randVar)) {
-			cout << "Infinity detected: continue executed in for" << endl;
-			continue;
-		}
 
 		EventOb event;
 		event.id = eventId;
@@ -81,10 +77,6 @@ void genObserverEvents(vector<EventOb>& observeEvents, int sampleRate, const dou
 		int randomTemp = rand();
 		double temp = (float)randomTemp / (float)(RAND_MAX+1);
 		double randVar = -log(1.00 - temp) / sampleRate;
-		if (isinf(randVar)) {
-			cout << "Infinity detected: continue executed in for" << endl;
-			continue;
-		}
 
 		elapsedTime += randVar;
 
@@ -97,23 +89,19 @@ void genObserverEvents(vector<EventOb>& observeEvents, int sampleRate, const dou
 
 		eventId++;
 	}
-	//cout << observeEvents.back().instTime << endl;
 }
 
-// Note: I need everything to get scaled up by 1000 or numbers will be too small
 void genDepartEvents(vector<double>& arrivalValues, const int serviceRate, vector<EventOb>& departEvents, const double totalSimTime) {
 
 	std::queue<double> waitQueue;
 	vector<double>::iterator arrivalIterator = arrivalValues.begin();
 	int eventIndex = 0;
 	double elapsedTime = 0;
-	int arrIndex = 0;
-	int departCount = 0;
 
 	while (elapsedTime < totalSimTime && arrivalIterator != arrivalValues.end()) {
 		if (waitQueue.empty()) {
 			elapsedTime += *arrivalIterator;
-			arrIndex++;
+
 			if (elapsedTime >= totalSimTime) break;
 			arrivalIterator++;
 
@@ -133,13 +121,12 @@ void genDepartEvents(vector<double>& arrivalValues, const int serviceRate, vecto
 			event.eventType = EventType::Departure;
 			event.packetDropped = false;
 			departEvents.push_back(event);
-			departCount++;
 
 			eventIndex++;
 		}
 		else if (waitQueue.front() > *arrivalIterator) {
 			elapsedTime += *arrivalIterator;
-			arrIndex++;
+
 			if (elapsedTime >= totalSimTime) break;
 			waitQueue.front() -= *arrivalIterator;
 			arrivalIterator++;
@@ -148,7 +135,7 @@ void genDepartEvents(vector<double>& arrivalValues, const int serviceRate, vecto
 		}
 		else {
 			elapsedTime += *arrivalIterator;
-			arrIndex++;
+
 			if (elapsedTime >= totalSimTime) break;
 			arrivalIterator++;
 			waitQueue.pop();
@@ -160,12 +147,8 @@ void genDepartEvents(vector<double>& arrivalValues, const int serviceRate, vecto
 			event.eventType = EventType::Departure;
 			event.packetDropped = false;
 			departEvents.push_back(event);
-			departCount++;
 
 			eventIndex++;
-		}
-		if (departCount > arrIndex) {
-			cout << "BAD" << endl;
 		}
 	}
 }
@@ -262,6 +245,7 @@ vector<Statistics> runDESimulator(vector<EventOb> allEvents) {
 	for (EventOb& event : allEvents) {
 		switch (event.eventType) {
 			case EventType::Arrival:
+				// Transition from Idle to Active
 				if (eventQueue.empty()) {
 					queueState.idleTime += (event.instTime - lastTimeCheckpoint);
 					queueState.stateLabel = QueueStateLabel::ACTIVE;
@@ -276,7 +260,7 @@ vector<Statistics> runDESimulator(vector<EventOb> allEvents) {
 				}
 				eventQueue.pop();
 
-				// Transition from active to Idle
+				// Transition from Active to Idle
 				if (eventQueue.empty()) {
 					queueState.activeTime += (event.instTime - lastTimeCheckpoint);
 					queueState.stateLabel = QueueStateLabel::IDLE;
@@ -378,36 +362,6 @@ vector<Statistics> runDESimulatorFiniteBuffer(vector<EventOb> allEvents, int cap
 	return stats;
 }
 
-/*void printTest1Results(vector<EventOb> someArray) {
-	double sum = 0;
-	double average;
-	double numerator = 0;
-
-	for (EventOb )
-
-	average = sum / 1000;
-	cout << "Average: " << average << endl;
-
-	for (int i = 0; i < 1000; i++) {
-		numerator += pow(someArray[i] - average, 2);
-	}
-	double variance = numerator / 999;
-	cout << "Variance: " << variance << endl;
-}*/
-string printEventType(EventOb event) {
-	switch (event.eventType) {
-	case EventType::Arrival:
-		return "Arrival";
-		break;
-	case EventType::Departure:
-		return "Departure";
-		break;
-	case EventType::Observer:
-		return "Observation";
-		break;
-	}
-}
-
 int main() {
 
 	srand(time(0));
@@ -418,10 +372,9 @@ int main() {
 	std::vector<EventOb> observeEvents;
 
 	/* Normal Parameters */
-	// Parameters are scaled up by 1000 for convenience
 	const int SERVICE_RATE = 1000000;
 	const double packLength = 2000.0;
-	const int TOTAL_SIMTIME = 1000; // not scaled 
+	const int TOTAL_SIMTIME = 1000; 
 	const int QUEUE_CAPACITY = 10;
 
 	ofstream myfile;
@@ -430,28 +383,9 @@ int main() {
 	
 	for (double ROW_CONST = 0.25; ROW_CONST < 1; ROW_CONST += 0.1) {
 		double ARRIVAL_RATE = SERVICE_RATE * ROW_CONST / packLength;
-		//cout << "ROW_CONST: " << ROW_CONST << endl;
-
-		/* Test Case 1: Arrival Significantly Faster than Departure */
-		//int arrivalRate = 25;
-		//int serviceRate = 5;
-		// Result: was good
-
-		/* Test Case 2: Departure Significantly Slower than Arrival */
-		/*int arrivalRate = 5;
-		int serviceRate = 50;*/
-		// Result: was good
 
 		genArrivalEvents(arrivalValues, arrivalEvents,
 			EventType::Arrival, ARRIVAL_RATE, TOTAL_SIMTIME);
-
-		// double-check sum
-		/*double theSum = 0.0;
-		for (int i = 0; i < arrivalValues.size() - 1; i++) {
-			theSum += arrivalValues.at(i);
-			//cout << theSum << endl;
-		}*/
-		//cout << theSum / arrivalValues.size() << endl;
 
 		/* For Infinite Queue */
 		double lambdaForDepartEvents = SERVICE_RATE / packLength;
@@ -461,14 +395,14 @@ int main() {
 		//genDepartEvents(arrivalValues, arrivalEvents, lambdaForDepartEvents, departEvents, TOTAL_SIMTIME, QUEUE_CAPACITY);
 
 		genObserverEvents(observeEvents, ARRIVAL_RATE * 6, TOTAL_SIMTIME);
-		// clean up the data here.
+
+		// Clean up the data
 		vector<EventOb>::iterator arrivalIt = arrivalEvents.begin();
 		vector<EventOb>::iterator departIt = departEvents.begin();
 		vector<int> problemIndices;
 		int itIndex = 0;
 		while (arrivalIt != arrivalEvents.end() && departIt != departEvents.end()) {
 			if (arrivalIt->instTime > departIt->instTime) {
-				//cout << "Problem Detected: Manually removing a rogue departure event." << endl;
 				int problemIndex = itIndex - problemIndices.size();
 				problemIndices.push_back(problemIndex);
 			}
@@ -482,21 +416,21 @@ int main() {
 		}
 		problemIndices.clear();
 
-
+		// Put all events into one vector
 		vector<EventOb> allEvents(arrivalEvents);
 		vector<EventOb>::iterator evIterator = allEvents.end();
 		allEvents.insert(evIterator, departEvents.begin(), departEvents.end());
 		evIterator = allEvents.end();
 		allEvents.insert(evIterator, observeEvents.begin(), observeEvents.end());
 		
+
+		// Sort Events based on simulation time
 		sort(allEvents.begin(), allEvents.end(), compare);
-
-
+		// For events occurring at the same simulation time, make sure Departure Event is ordered last
 		vector<EventOb>::iterator prev = allEvents.begin();
  		vector<EventOb>::iterator current = allEvents.begin();
 		current++;
 		while (current != allEvents.end()) {
-			// Actual Logic
 			if (prev->instTime == current->instTime) {
 				if (prev->eventType == EventType::Departure) {
 					swap(*prev, *current);
@@ -504,26 +438,9 @@ int main() {
 			}
 			prev++;
 			current++;
-			
-			// Test that all events are in order
-			/*double currentTime = it->instTime;
-			if (previousTime > currentTime) {
-				cerr << "Error: Misordering of events in timing" << endl;
-				exit(1);
-			}
-			if (previousTime == currentTime) {
-				cout << "Found Equal Times: " << endl;
-				cout << "Previous Event: ";
-				printEventType(previousEvent);
-				cout << endl;
-				cout << "Current Time: ";
-				printEventType(*it);
-				cout << endl;
-			}
-			previousEvent = *it;
-			previousTime = currentTime;*/
 		}
 
+		// DEBUGGING: Test that number of departed packets never exceeds number of arrived packets
 		int arrivalCount = 0;
 		int departCount = 0;
 		int amountOfErrorPoints = 0;
@@ -539,46 +456,32 @@ int main() {
 		}
 		current++;
 		while (current != allEvents.end()) {
-			// Just for Debugging
 			switch (current->eventType) {
-			case EventType::Arrival:
-				arrivalCount++;
-				break;
-			case EventType::Departure:
-				departCount++;
-				break;
+				case EventType::Arrival:
+					arrivalCount++;
+					break;
+				case EventType::Departure:
+					departCount++;
+					break;
 			}
 			if (departCount > arrivalCount) {
 				amountOfErrorPoints++;
-				//cout << "CurrentEvent Time: " << current->instTime << endl;
-				//cout << "CurrentEvent Event: " << printEventType(*current) << endl;
-				//cout << "Previous Event: " << prev->instTime << endl;
-				//cout << "Previous Event: " << printEventType(*prev) << endl;
 			}
 			current++;
 			prev++;
 		}
-		//cout << "TotalErrorPoints: " << amountOfErrorPoints << endl;
 		myfile << amountOfErrorPoints << endl;
 
-		vector<Statistics> stats = runDESimulator(allEvents);
 
-		// Print statistics
+		// Print statistics for MM1 Queue
+		vector<Statistics> stats = runDESimulator(allEvents);
 		double idleRatio = 0.0;
 		double averagePacketsInQueue = 0.0;
 		vector<Statistics>::iterator itStats = stats.end();
 		itStats--;
 		const int SAMPLES_COLLECTED = 4;
 		for (int i = 0; i < SAMPLES_COLLECTED; i++, itStats--) {
-			if (isinf(itStats->idleTime) || itStats->idleTime == 0) {
-				cerr << "Error: bad idleTime value: " << itStats->idleTime << endl;
-				exit(1);
-			}
 			idleRatio += itStats->idleTime;
-			if (isinf(itStats->avgPacketsInQueue) || itStats->avgPacketsInQueue == 0) {
-				cerr << "Error: bad idleTime value: " << itStats->avgPacketsInQueue << endl;
-				exit(1);
-			}
 			averagePacketsInQueue += itStats->avgPacketsInQueue;
 		}
 
@@ -598,34 +501,3 @@ int main() {
 
 	return 0;
 }
-
-
-// Testing swapping
-//int main() {
-//	// attempt 1
-//	std::vector<int> v;
-//	v.push_back(22);
-//	v.push_back(33);
-//	v.push_back(44);
-//	v.push_back(55);
-//	v.push_back(66);
-//	v.push_back(77);
-//	v.push_back(88);
-//	std::vector<int>::iterator prev = v.begin();
-//	prev++;
-//	std::vector<int>::iterator current = v.begin();
-//	current++;
-//	current++;
-//	current++;
-//
-//	swap(*prev, *current);
-//	//cout << *prev << endl;
-//	//cout << *current << endl;
-//
-//	for (; prev != v.end(); prev++) {
-//		cout << *prev << endl;
-//	}
-//	exit(0);
-//}
-
-
