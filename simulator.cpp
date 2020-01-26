@@ -41,8 +41,7 @@ void genArrivalEvents(vector<double>& randValuesArray, vector<EventOb>& randVarA
 
 	while (elapsedTime < totalSimTime) {
 		int randomTemp = rand();
-		if (randomTemp == RAND_MAX) { randomTemp = RAND_MAX - 1; }
-		double temp = (float)randomTemp / (float)RAND_MAX;
+		double temp = (float)randomTemp / (float)(RAND_MAX+1);
 		randVar = -log(1.00 - temp) / lambda;
 		if (isinf(randVar)) {
 			cout << "Infinity detected: continue executed in for" << endl;
@@ -67,8 +66,7 @@ double genRandomValue(int lambda, const double totalSimTime){
 	double randVar;
 	do {
 		int randomTemp = rand();
-		if (randomTemp == RAND_MAX) { randomTemp = RAND_MAX - 1; }
-		double temp = (float)randomTemp / (float)RAND_MAX;
+		double temp = (float)randomTemp / (float)(RAND_MAX+1);
 		randVar = -log(1.00 - temp) / (float)lambda;
 	} while (isinf(randVar));
 	return randVar;
@@ -81,8 +79,7 @@ void genObserverEvents(vector<EventOb>& observeEvents, int sampleRate, const dou
 
 	while (elapsedTime < totalSimTime) {
 		int randomTemp = rand();
-		if (randomTemp == RAND_MAX) { randomTemp = RAND_MAX - 1; }
-		double temp = (float)randomTemp / (float)RAND_MAX;
+		double temp = (float)randomTemp / (float)(RAND_MAX+1);
 		double randVar = -log(1.00 - temp) / sampleRate;
 		if (isinf(randVar)) {
 			cout << "Infinity detected: continue executed in for" << endl;
@@ -248,8 +245,6 @@ bool compare(const EventOb& e1, const EventOb& e2) {
 
 vector<Statistics> runDESimulator(vector<EventOb> allEvents) {
 	
-	int arrivals = 0;
-	int departures = 0;
 	int observations = 0;
 
 	queue<EventOb> eventQueue;
@@ -264,33 +259,26 @@ vector<Statistics> runDESimulator(vector<EventOb> allEvents) {
 
 	int sumOfPacketsInQueueAllFrames = 0;
 
-	cout << "No. Arrivals, No. Departures, No. Observers -- Before exiting simulator" << endl;
 	for (EventOb& event : allEvents) {
-		if (isinf(event.instTime)) {
-			cout << arrivals << "," << departures << "," << observations << endl;
-			//break;
-		}
 		switch (event.eventType) {
 			case EventType::Arrival:
 				if (eventQueue.empty()) {
-					queueState.idleTime += event.instTime - lastTimeCheckpoint;
+					queueState.idleTime += (event.instTime - lastTimeCheckpoint);
 					queueState.stateLabel = QueueStateLabel::ACTIVE;
 					lastTimeCheckpoint = event.instTime;
 				}
 				eventQueue.push(event);
-				arrivals++;
 				break;
 			case EventType::Departure:
-				departures++;
 				if (eventQueue.empty()) { 
 					cout << "Event Queue detected as empty" << endl;
-					cout << "Departure No.: " << departures << endl;
 					continue;
 				}
 				eventQueue.pop();
 
+				// Transition from active to Idle
 				if (eventQueue.empty()) {
-					queueState.activeTime += event.instTime - lastTimeCheckpoint;
+					queueState.activeTime += (event.instTime - lastTimeCheckpoint);
 					queueState.stateLabel = QueueStateLabel::IDLE;
 					lastTimeCheckpoint = event.instTime;
 				}
@@ -301,16 +289,16 @@ vector<Statistics> runDESimulator(vector<EventOb> allEvents) {
 				sumOfPacketsInQueueAllFrames += eventQueue.size();
 
 				if (queueState.stateLabel == QueueStateLabel::IDLE) {
-					queueState.idleTime += event.instTime - lastTimeCheckpoint;
+					queueState.idleTime += (event.instTime - lastTimeCheckpoint);
 				} else {
-					queueState.activeTime += event.instTime - lastTimeCheckpoint;
+					queueState.activeTime += (event.instTime - lastTimeCheckpoint);
 				}
 				lastTimeCheckpoint = event.instTime; 
 
 				Statistics stat;
 				stat.avgPacketsInQueue = (float)sumOfPacketsInQueueAllFrames / (float)observations;
 				stat.idleTime = queueState.idleTime / event.instTime;
-				stat.lossRatio = -1.0; // TODO: no-value ?
+				stat.lossRatio = -1.0;
 				stats.push_back(stat);
 		}
 	}
@@ -437,12 +425,12 @@ int main() {
 	const int QUEUE_CAPACITY = 10;
 
 	ofstream myfile;
-	myfile.open("data/output7.csv");
+	myfile.open("data/output5.csv");
 	myfile << "Row Constant Value, Av. No. Packets in Buffer, Idle Time %" << endl;
 	
 	for (double ROW_CONST = 0.25; ROW_CONST < 1; ROW_CONST += 0.1) {
 		double ARRIVAL_RATE = SERVICE_RATE * ROW_CONST / packLength;
-		cout << "ROW_CONST: " << ROW_CONST << endl;
+		//cout << "ROW_CONST: " << ROW_CONST << endl;
 
 		/* Test Case 1: Arrival Significantly Faster than Departure */
 		//int arrivalRate = 25;
@@ -480,8 +468,9 @@ int main() {
 		int itIndex = 0;
 		while (arrivalIt != arrivalEvents.end() && departIt != departEvents.end()) {
 			if (arrivalIt->instTime > departIt->instTime) {
-				cout << "Problem Detected: Manually removing a rogue departure event." << endl;
-				problemIndices.push_back(itIndex);
+				//cout << "Problem Detected: Manually removing a rogue departure event." << endl;
+				int problemIndex = itIndex - problemIndices.size();
+				problemIndices.push_back(problemIndex);
 			}
 			arrivalIt++;
 			departIt++;
@@ -489,6 +478,7 @@ int main() {
 		}
 		for (vector<int>::iterator it = problemIndices.begin(); it != problemIndices.end(); it++) {
 			departEvents.erase(departEvents.begin() + *it);
+			arrivalEvents.erase(arrivalEvents.begin() + *it);
 		}
 		problemIndices.clear();
 
@@ -536,6 +526,7 @@ int main() {
 
 		int arrivalCount = 0;
 		int departCount = 0;
+		int amountOfErrorPoints = 0;
 		prev = allEvents.begin();
 		current = allEvents.begin();
 		switch (current->eventType) {
@@ -558,14 +549,17 @@ int main() {
 				break;
 			}
 			if (departCount > arrivalCount) {
-				cout << "CurrentEvent Time: " << current->instTime << endl;
-				cout << "CurrentEvent Event: " << printEventType(*current) << endl;
-				cout << "Previous Event: " << prev->instTime << endl;
-				cout << "Previous Event: " << printEventType(*prev) << endl;
+				amountOfErrorPoints++;
+				//cout << "CurrentEvent Time: " << current->instTime << endl;
+				//cout << "CurrentEvent Event: " << printEventType(*current) << endl;
+				//cout << "Previous Event: " << prev->instTime << endl;
+				//cout << "Previous Event: " << printEventType(*prev) << endl;
 			}
 			current++;
 			prev++;
 		}
+		//cout << "TotalErrorPoints: " << amountOfErrorPoints << endl;
+		myfile << amountOfErrorPoints << endl;
 
 		vector<Statistics> stats = runDESimulator(allEvents);
 
