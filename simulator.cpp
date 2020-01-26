@@ -315,7 +315,7 @@ vector<Statistics> runDESimulator(vector<EventOb> allEvents) {
 }
 
 // Not tested
-vector<Statistics> runDESimulatorFiniteBuffer(vector<EventOb> allEvents, int capacity) {
+vector<Statistics> runDESimulatorFiniteBuffer(vector<EventOb> allEvents) {
 
 	int observations = 0;
 
@@ -399,15 +399,15 @@ int main() {
 	const int SERVICE_RATE = 1000000;
 	const double packLength = 2000.0;
 	const int TOTAL_SIMTIME = 1000; 
-	const int QUEUE_CAPACITY = 10;
+	const int QUEUE_CAPACITY = 20;
 
 	ofstream myfile;
 	ofstream errorCount;
-	myfile.open("data/output1.csv");
-	errorCount.open("data/errors.txt");
+	myfile.open("data_mm1k/output__K20__No1.csv");
+	errorCount.open("data_mm1k/errors.txt");
 	myfile << "Row Constant Value, Av. No. Packets in Buffer, Idle Time %, Loss Ratio" << endl;
 	
-	for (double ROW_CONST = 0.25; ROW_CONST < 1; ROW_CONST += 0.1) {
+	for (double ROW_CONST = 0.5; ROW_CONST <= 1.5; ROW_CONST += 0.2) {
 		double ARRIVAL_RATE = SERVICE_RATE * ROW_CONST / packLength;
 		double lambdaForDepartEvents = SERVICE_RATE / packLength;
 
@@ -531,7 +531,7 @@ int main() {
 		for (int i = 0; i < SAMPLES_COLLECTED; i++, itStats--) {
 			//cout << itStats->idleTime << endl;
 			//cout << itStats->avgPacketsInQueue << endl;
-			cout << itStats->lossRatio << endl;
+			//cout << itStats->lossRatio << endl;
 
 			idleRatio += itStats->idleTime;
 			averagePacketsInQueue += itStats->avgPacketsInQueue;
